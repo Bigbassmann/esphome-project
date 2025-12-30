@@ -1,13 +1,13 @@
 substitutions:   # Main-AITrip-ESP32-C3-FN4-Super-Mini.yaml
   device_name: supermini-1
-  friendly_name: Super Mini32 1 (235)
-  api_key: "fmlpfRzTy+RXkwsNjjdKiGJDPWFKRWsqwDxk4fyAEBI="  # Commented out: Disables API encryption for testing per your request.
-  ota_password: "dba6cbb118b753240121b7d266f9ff56"  # Keep uncommented: Secure OTA password as previously agreed.
+  friendly_name: Super Mini32 1 (url)
+  api_key: ""  # Commented out: Disables API encryption for testing
+  ota_password: ""  # Secure OTA password 
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   wifi_power_save_mode: LIGHT # NONE, LIGHT, MODEM
-  wifi_use_address: 192.168.158.235
-  manual_ip_static_ip: 192.168.158.235
+  wifi_use_address: 192.168.158.xxx
+  manual_ip_static_ip: 192.168.158.xxx
   manual_ip_gateway: 192.168.158.1
   manual_ip_subnet: 255.255.255.0
   ap_ssid: "Super Mini Fallback" #"ESP32C3-Mini-Test Fallback"
