@@ -1,12 +1,12 @@
-external_components:
-  - source:
-      type: local
-      path: custom_components
+#external_components:
+ # - source:
+  #    type: local
+   #   path: custom_components
 
 esphome:
   includes:
-    - <esp_wifi.h>  # Built-in ESP-IDF header for the function
-    - <cstdlib>     # Added: For strtof (safe float parsing without exceptions)
+    - <esp_wifi.h>    #<esp_wifi.h>  # Built-in ESP-IDF header for the function
+    - <cstdlib>      #<cstdlib>     # Added: For strtof (safe float parsing without exceptions)
 
 text_sensor:
   - platform: template

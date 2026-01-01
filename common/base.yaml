@@ -1,6 +1,6 @@
 esphome:
   includes:
-    - <esp_wifi.h>  # Built-in ESP-IDF header for the function
+    - <esp_wifi.h>  #<esp_wifi.h>  # Built-in ESP-IDF header for the function
   on_boot:
     priority: -100
     then:
@@ -74,6 +74,7 @@ esphome:
             lambda: 'return !id(sleep_allowed);'
           then:
             - deep_sleep.prevent: deep_sleep_1
+#      - script.execute: mhz19_warmup
 
 wifi:
   ssid: !secret wifi_ssid  # Shared secret
@@ -135,3 +136,9 @@ button:
   - platform: factory_reset
     name: "ESP Factory Reset"
     entity_category: config
+
+#script:
+ # - id: mhz19_warmup
+  #  then:
+   #   - delay: 180s  # 3 minutes
+    #  - logger.log: "MH-Z19 warmed up and ready."

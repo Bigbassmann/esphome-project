@@ -1,0 +1,47 @@
+sensor:
+  - platform: bmp280_i2c  #default 0x76
+    address: 0x76
+    update_interval: 60s
+    iir_filter: 2x  # Add this: Low-pass filter (options: OFF, 2x, 4x, 8x, 16x)
+    temperature:
+      name: "${device_name} BMP temp"
+      oversampling: 2x
+    pressure:
+      name: "${device_name} BMP Pressure"
+
+  - platform: aht10
+    variant: AHT20
+    address: 0x38  #default
+    update_interval: 60s
+    temperature:
+      name: "${device_name} AHT20 temp"
+      id: aht20_temp
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+   
+    humidity:
+      name: "${device_name} AHT20 humidity"
+      id: aht20_humidity
+      accuracy_decimals: 1
+      filters:
+      - filter_out: 0.0
+      - median:
+          window_size: 3
+          send_every: 3
+          send_first_at: 1
+
+  - platform: template
+    name: "${device_name} AHT20 Temp in C"  # Optional: For visibility in dashboard
+    id: aht20_temp_c  # New ID to reference in SGP30
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s  # Match AHT20 interval

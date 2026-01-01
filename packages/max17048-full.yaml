@@ -1,0 +1,29 @@
+# max17048.yaml - Reusable package for MAX17048 fuel gauge in ESPHome (ESP-IDF framework)
+
+external_components:
+  - source:
+      type: local
+      path: custom_components/max17048_sensor
+
+max17048_sensor:
+  i2c_id: bus_a  # Matches your board package's I2C bus ID
+  voltage:
+    name: "${device_name} Battery Voltage"
+  soc:
+    name: "${device_name} Battery SOC"
+  rate:
+    name: "${device_name} Battery Charge Rate"
+
+#sensor:
+ # - platform: max1704x
+  #  model: MAX17048  # Specify your model
+   # i2c_id: bus_a  # Matches your board package's I2C bus ID
+    #voltage:
+#      name: "${device_name} Battery Voltage"
+ #   state_of_charge:
+  #    name: "${device_name} Battery SOC"
+   # charge_rate:
+    #  name: "${device_name} Battery Charge Rate"
+    # Optional additional options if needed:
+#    update_interval: 60s
+    # address: 0x36  # Default for MAX17048

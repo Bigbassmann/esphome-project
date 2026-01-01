@@ -1,5 +1,5 @@
 sensor:
-  - platform: aht10
+  - platform: aht10   # 0x38
     variant: AHT20
     id: aht20_sensor
     temperature:

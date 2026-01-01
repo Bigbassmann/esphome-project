@@ -1,11 +1,4 @@
 #AITrip ESP32-C3 FN4 SUPER MINI
-esp32:
-  board: esp32-c3-devkitm-1
-  framework:
-    type: esp-idf
-    components:
-      - npwh/max17048^0.0.2 # for max17048 LiPo Fuel Guage
-    
 substitutions:
   # GPIO8 - internal LED
   # GPIO9 - boot button
@@ -38,8 +31,15 @@ substitutions:
   pms_pm2_5_name: "${device_name} PM2.5"
   pms_pm1_name: "${device_name} PM1.0"
   pms_uart_id: pms
-  
-i2c:  # 
+  esp32_board: esp32-c3-devkitm-1
+  esp_framework_type: esp-idf
+
+esp32:
+  board: ${esp32_board}
+  framework:
+    type: ${esp_framework_type}
+
+i2c:  # Add this section
   sda: ${i2c_sda_pin}
   scl: ${i2c_scl_pin}
   scan: true
@@ -60,6 +60,5 @@ uart:
     rx_pin: ${mh_rx_pin}
     tx_pin: ${mh_tx_pin}
     baud_rate: ${mh_baud_rate}
-
 
   
