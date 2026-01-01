@@ -22,15 +22,16 @@ class MAX17048Sensor : public PollingComponent, public i2c::I2CDevice {
   }
 
   void update() override {
-    uint16_t raw;
-    if (this->voltage_sensor_ != nullptr) {
-      if (this->read_register(0x02, (uint8_t *) &raw, 2) == ESP_OK) {
-        float voltage = __builtin_bswap16(raw) * 0.00125f;  // Big-endian * 1.25 mV
-        this->voltage_sensor_->publish_state(voltage);
-      } else {
-        this->voltage_sensor_->publish_state(NAN);
-      }
+  uint16_t raw;
+  if (this->voltage_sensor_ != nullptr) {
+    if (this->read_register(0x02, (uint8_t *) &raw, 2) == ESP_OK) {
+      ESP_LOGD("MAX17048", "Raw VCELL: 0x%04X", raw);
+      float voltage = __builtin_bswap16(raw) * 0.000078125f;  // Correct: 78.125 μV/LSB
+      this->voltage_sensor_->publish_state(voltage);
+    } else {
+      this->voltage_sensor_->publish_state(NAN);
     }
+  }
 
     if (this->soc_sensor_ != nullptr) {
       if (this->read_register(0x04, (uint8_t *) &raw, 2) == ESP_OK) {
