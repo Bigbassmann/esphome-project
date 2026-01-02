@@ -2,11 +2,10 @@
 sensor:
   - platform: mhz19
     co2:
-      name: "${device_name} MH-Z19 CO2 Sensor"
+      name: "AQ CO2 - MHZ"
       id: co2
-
     temperature:
-      name: "${device_name} MH-Z19 Temp"
+      name: "AQ Temp - MHZ"
     update_interval: 30s
     automatic_baseline_calibration: false  # Change to true for auto-cal in fresh air
     uart_id: mh
@@ -14,7 +13,7 @@ sensor:
 
 switch:
   - platform: template
-    name: "CO2 Sensor Zero Calibration"
+    name: "AQ CO2 Zero Calibration - MHZ"
     turn_on_action:
       - mhz19.calibrate_zero: mh_sensor
       - switch.turn_off: co2_cal

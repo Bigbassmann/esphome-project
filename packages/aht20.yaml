@@ -3,7 +3,7 @@ sensor:
     variant: AHT20
     id: aht20_sensor
     temperature:
-      name: "${device_name} AHT20 Temp"
+      name: "AQ Temp - AHT20"
       id: fr_temp
       unit_of_measurement: "°F"
       accuracy_decimals: 1
@@ -12,7 +12,7 @@ sensor:
             if (isnan(x)) return NAN;
             return x * (9.0/5.0) + 32.0;
     humidity:
-      name: "${device_name} AHT20 Humidity"
+      name: "AQ Humidity - AHT20"
       id: fr_humidity
       accuracy_decimals: 1
     update_interval: 30s

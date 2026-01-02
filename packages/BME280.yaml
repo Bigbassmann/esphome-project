@@ -1,7 +1,7 @@
 sensor:
   - platform: bme280
       temperature:
-        name: "Temperature"
+        name: "AQ Temp - BME"
         oversampling: 1x
         id: temp
         filters:
@@ -11,11 +11,11 @@ sensor:
               if(id(temp).state > id(temp_max)) { id(temp_max) = id(temp).state; }
               if(id(temp).state < id(temp_min)) { id(temp_min) = id(temp).state; }
       pressure:
-        name: "Pressure"
+        name: "Air Pres - BME"
         oversampling: 1x
         id: press
       humidity:
-        name: "Humidity"
+        name: "AQ Humidity - BME"
         oversampling: 1x
         id: hum
       address: 0x76

@@ -1,6 +1,8 @@
 esphome:
   includes:
     - <esp_wifi.h>  #<esp_wifi.h>  # Built-in ESP-IDF header for the function
+    - <cstdlib>  #<cstdlib> # Added: For strtof (safe float parsing without exceptions)
+    - <driver/gpio.h>  # Add this for gpio_get_level
   on_boot:
     priority: -100
     then:
@@ -30,6 +32,27 @@ esphome:
           ESP_LOGI("reset", "[BOOT] Reset reason: %d (%s)", reason, reason_str);
           id(esp_reset_reason_text).publish_state(reason_str);
           ESP_LOGI("boot", "[BOOT] Initial uptime: %.1fs", id(esp_uptime).state);
+
+          // Detailed wakeup cause if from deep sleep
+          if (reason == ESP_RST_DEEPSLEEP) {
+            esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+            const char *wakeup_str;
+            switch (wakeup_cause) {
+              case ESP_SLEEP_WAKEUP_UNDEFINED: wakeup_str = "Undefined"; break;
+              case ESP_SLEEP_WAKEUP_ALL: wakeup_str = "All"; break;
+              case ESP_SLEEP_WAKEUP_EXT0: wakeup_str = "EXT0 (Pin Wake)"; break;
+              case ESP_SLEEP_WAKEUP_EXT1: wakeup_str = "EXT1"; break;
+              case ESP_SLEEP_WAKEUP_TIMER: wakeup_str = "Timer"; break;
+              case ESP_SLEEP_WAKEUP_TOUCHPAD: wakeup_str = "Touchpad"; break;
+              case ESP_SLEEP_WAKEUP_ULP: wakeup_str = "ULP"; break;
+              case ESP_SLEEP_WAKEUP_GPIO: wakeup_str = "GPIO"; break;
+              case ESP_SLEEP_WAKEUP_UART: wakeup_str = "UART"; break;
+              default: wakeup_str = "Unknown"; break;
+            }
+            ESP_LOGI("wakeup", "[BOOT] Wakeup cause: %d (%s) | GPIO1 state: %d", wakeup_cause, wakeup_str, gpio_get_level(GPIO_NUM_1));
+            // Publish to the new text_sensor if desired
+            id(wakeup_cause_text).publish_state(wakeup_str);
+          }
       - lambda: |-
           id(sleep_allowed) = !id(deep_sleep_override).state; // Set based on local switch (off = allow)
           ESP_LOGI("sleep", "[BOOT] Deep sleep %s at boot (based on local override).",
@@ -45,7 +68,7 @@ esphome:
           else if (opt == "VERBOSE") level = ESPHOME_LOG_LEVEL_VERBOSE;
           else if (opt == "VERY_VERBOSE") level = ESPHOME_LOG_LEVEL_VERY_VERBOSE;
           esphome::logger::global_logger->set_log_level(level);
-          ESP_LOGI("boot", "Restored logger level: %s", opt.c_str());
+          ESP_LOGI("boot", "[BOOT] Restored logger level: %s", opt.c_str());
       
       - lambda: |-
           // Added: Sync select if unrestored/empty (avoids NA, ensures default)
@@ -64,10 +87,10 @@ esphome:
               esp_wifi_set_max_tx_power(power_quarter);
               id(wifi_output_power_sensor).publish_state(power_dbm);  // Ensure sensor publishes on boot
             } else {
-              ESP_LOGW("boot", "Invalid WiFi power option: %s", opt);
+              ESP_LOGW("boot", "[BOOT] Invalid WiFi power option: %s", opt);
             }
           } else {
-            ESP_LOGW("boot", "WiFi power option empty; skipping set.");
+            ESP_LOGW("boot", "[BOOT] WiFi power option empty; skipping set.");
           }
       - if:
           condition:
@@ -85,7 +108,7 @@ wifi:
     password: "12345678"  # Default
   on_disconnect:
     - lambda: |-
-        ESP_LOGW("wifi", "WiFi disconnected - falling back to AP mode for reprovisioning.");
+        ESP_LOGW("wifi", "[Wi-Fi] WiFi disconnected - falling back to AP mode for reprovisioning.");
 
 sensor:
   - platform: uptime
@@ -96,7 +119,7 @@ sensor:
     update_interval: 30s
 
   - platform: internal_temperature
-    name: "ESP Internal Temp"
+    name: "Temp - ESP Circuit Board"
     id: sys_esp_temperature
     entity_category: ""
     unit_of_measurement: °F

@@ -45,11 +45,11 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF  # Default off (allow sleep)
     on_turn_on:
       - lambda: |-
-          ESP_LOGI("override", "Deep Sleep Override turned ON (blocking sleep)");
+          ESP_LOGI("override", "[OVERRIDE] Deep Sleep Override turned ON (blocking sleep)");
           id(sleep_allowed) = false;
     on_turn_off:
       - lambda: |-
-          ESP_LOGI("override", "Deep Sleep Override turned OFF (allowing sleep)");
+          ESP_LOGI("override", "[OVERRIDE] Deep Sleep Override turned OFF (allowing sleep)");
           id(sleep_allowed) = true;
 select:
   - platform: template
@@ -59,6 +59,8 @@ select:
     optimistic: true
     restore_value: true
     options:
+      - "1"
+      - "5"
       - "10"
       - "20"
       - "30"
@@ -68,10 +70,10 @@ select:
     on_value:
       - lambda: |-
           id(countdown_dur_seconds) = atoi(x.c_str());
-          ESP_LOGI("config", "Countdown duration updated to %d seconds", id(countdown_dur_seconds));
+          ESP_LOGI("config", "[CONFIG] Countdown duration updated to %d seconds", id(countdown_dur_seconds));
           
   - platform: template
-    name: "Wake/Run Duration (sec)"
+    name: "Sleep Wake/Run Duration (sec)"
     id: run_duration_select
     entity_category: config
     optimistic: true
@@ -88,7 +90,7 @@ select:
     on_value:
       - lambda: |-
           id(run_min_seconds) = atoi(x.c_str());
-          ESP_LOGI("config", "Run min duration updated to %d seconds", id(run_min_seconds));
+          ESP_LOGI("config", "[CONFIG] Run min duration updated to %d seconds", id(run_min_seconds));
 
   - platform: template
     name: "Sleep Duration (sec)"
@@ -109,7 +111,7 @@ select:
     on_value:
       - lambda: |-
           id(sleep_duration_seconds) = atoi(x.c_str());
-          ESP_LOGI("config", "Sleep duration updated to %d seconds", id(sleep_duration_seconds));
+          ESP_LOGI("config", "[CONFIG] Sleep duration updated to %d seconds", id(sleep_duration_seconds));
 sensor:
   - platform: template  # New: Countdown sensor (shows seconds to sleep during countdown; 0 otherwise).
     name: "Sleep Countdown"
@@ -180,7 +182,7 @@ interval:
           float current_uptime = esphome::millis() / 1000.0f;  // Real-time uptime
           ESP_LOGD("sleep", "[AUTO] Current uptime: %.1fs (min required: %d s)", current_uptime, id(run_min_seconds));
 
-          // Auto-sleep logic: trigger countdown after min run time if allowed and not already counting
+            // Auto-sleep logic: trigger countdown after min run time if allowed and not already counting
           if (id(sleep_allowed) && current_uptime >= id(run_min_seconds) && id(countdown_seconds) == 0) {
             id(countdown_seconds) = id(countdown_dur_seconds); // Start countdown with selected duration
             auto time_now = id(sntp_time).now();

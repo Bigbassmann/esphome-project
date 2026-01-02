@@ -4,57 +4,50 @@ esp32:
   variant: ESP32C3
   framework:
     type: esp-idf
-#    components:  #will pull from max17048_seeed_xiao_esp32c3.yaml
-#      - npwh/max17048^0.0.2 # for max17048 LiPo Fuel Guage
-#    
+
 substitutions:
   wakeup_pin: GPIO4  #A2/D2/ADC1_CH4, safe/Reset/UART1_TX
   wakeup_pin_mode: INVERT_WAKEUP
-  # usb_detect_pin: GPIO5 #ADC1_CH5, safe/D3 - was 9/USB power (e.g., high if powered)/wired to VBUS for battery monitor
+#   usb_detect_pin: GPIO5 #ADC1_CH5, safe/D3 - was 9/USB power (e.g., high if powered)/wired to VBUS for battery monitor
   stay_awake_pin: GPIO10 #D10/MOSI/Status LED/SPI
   battery_adc_pin: GPIO3 #ADC1_CH3, safe/A1/D1/ADC1_CH3. Ideal for battery voltage (analog read with divider for 3.7V LiPo)
   i2c_sda_pin: GPIO6 #I2C SDA/D4
   i2c_scl_pin: GPIO7 #I2C SCL/D5
-  #status_led: GPIO10 #Safe for status LED/D10/MOSI/deepsleep wake
+#  status_led: GPIO10 #Safe for status LED/D10/MOSI/deepsleep wake
   safe_boot_pin: GPIO0 #OK (input/output) no pin
   pwm_output: GPIO3 #ADC1_CH3, safe/A1/D1/deepsleep wake
   pms_rx_pin: GPIO20 #D7/RX/UART0_RX
   pms_tx_pin: GPIO21 #TX/D6/UART0_TX
   miso_pin: GPIO9 #OK (safe_boot pin)/D9/MISO/SPI, strapping pin (safe for boot modes).
-  mosi_pin: GPIO10 #D10/MOSI/Safe for LED/MOSI for SPI, safe for LED.
+  mosi_pin: GPIO10   # D10/MOSI/Safe for LED/MOSI for SPI, safe for LED.
   sck_pin: GPIO8 #D8/SCK/OK/Safe/SCK for SPI, strapping pin.
-  #GPIO1 NOT ADC, avoid analog - not a pin/A0/D0/Strapping/deepsleep wake
-  #GPIO2 #/A0/D0/Strapping/ADC1_CH2, safe/deepsleep wake
+#  #GPIO1 NOT ADC, avoid analog - not a pin/A0/D0/Strapping/deepsleep wake
+#  #GPIO2 #/A0/D0/Strapping/ADC1_CH2, safe/deepsleep wake
   pms_baud_rate: 9600
-  # UART for MH (e.g., MH-Z19) Test for stability, as UART1 on C3 has some limitations (e.g., no hardware flow control). If logs show issues (e.g., no data), swap RX/TX wiring or try lower baud rates initially.
+#  # UART for MH (e.g., MH-Z19) Test for stability, as UART1 on C3 has some limitations (e.g., no hardware flow control). If logs show issues (e.g., no data), swap RX/TX wiring or try lower baud rates initially.
   mh_uart_id: mh
   mh_rx_pin: GPIO10  # or 4 - safe for RX, PWM-capable but no default conflicts
   mh_tx_pin: GPIO5  # or 6 safe for TX, also ADC1_CH1 but fine for UART
   mh_baud_rate: 9600
-  # PMSX003 sensor settings
+#  # PMSX003 sensor settings
   pms_update_interval: 120s
-  pms_pm10_name: "${device_name} PM10.0"
-  pms_pm2_5_name: "${device_name} PM2.5"
-  pms_pm1_name: "${device_name} PM1.0"
+  pms_pm10_name: "Air Quality-PM 10.0"
+  pms_pm2_5_name: "Air Quality-PM 2.5"
+  pms_pm1_name: "Air Quality-PM 1.0"
   pms_uart_id: pms
 
-i2c:  # Add this section
+i2c: 
   sda: ${i2c_sda_pin}
   scl: ${i2c_scl_pin}
   scan: true
   id: bus_a
 
-#Physically connect PMS7003 RX to GPIO19 (board TX). 
-#GPIO19 is safe on ESP32 D1 Mini (it's UART2_TX by default, no conflicts with USB serial or flash).  
 uart:
   - id: ${pms_uart_id}
     rx_pin: ${pms_rx_pin}
     tx_pin: ${pms_tx_pin}
     baud_rate: ${pms_baud_rate}
     
-    #MH UART (Commented Out): If you're planning to enable the MH-Z19 (CO2 sensor), note that GPIO1 (RX)
-    #and GPIO3 (TX) are the default USB serial pins on ESP32. This can conflict with logging or OTA. 
-    #Remap to free pins like GPIO16 (RX) and GPIO17 (TX) via substitutions
   - id: ${mh_uart_id}
     rx_pin: ${mh_rx_pin}
     tx_pin: ${mh_tx_pin}

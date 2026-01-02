@@ -1,14 +1,11 @@
-#external_components:
- # - source:
-  #    type: local
-   #   path: custom_components
-
-esphome:
-  includes:
-    - <esp_wifi.h>    #<esp_wifi.h>  # Built-in ESP-IDF header for the function
-    - <cstdlib>      #<cstdlib>     # Added: For strtof (safe float parsing without exceptions)
-
 text_sensor:
+  - platform: template
+    name: "Sleep-Wakeup Cause"  # Entity name in HA
+    id: wakeup_cause_text
+    entity_category: diagnostic
+    lambda: return esphome::optional<std::string>("");  # Empty default as optional string
+    update_interval: never  # Only publish on events, not periodically
+
   - platform: template
     name: "WiFi Power Save Mode"
     id: wifi_power_save_mode_text
@@ -78,10 +75,10 @@ select:
           else if (opt == "VERBOSE") level = ESPHOME_LOG_LEVEL_VERBOSE;
           else if (opt == "VERY_VERBOSE") level = ESPHOME_LOG_LEVEL_VERY_VERBOSE;
           esphome::logger::global_logger->set_log_level(level);
-          ESP_LOGI("config", "Logger level set to %s", opt.c_str());
+          ESP_LOGI("config", "[CONFIG] Logger level set to %s", opt.c_str());
 
   - platform: template  # Changed from wifi_tx_power to template for standard restoration
-    name: "WiFi Power Select"
+    name: "Wi-Fi Power Select"
     id: wifi_power_level_select
     entity_category: config
     optimistic: true
@@ -121,12 +118,12 @@ select:
             esp_wifi_set_max_tx_power(power_quarter);
             id(wifi_output_power_sensor).publish_state(power_dbm);
           } else {
-            ESP_LOGW("config", "Invalid WiFi power selection: %s", x.c_str());
+            ESP_LOGW("config", "[CONFIG] Invalid WiFi power selection: %s", x.c_str());
           }
                
 sensor:
   - platform: template
-    name: "ESP Reset Reason (Raw)"
+#    name: "ESP Reset Reason (Raw)"
     id: esp_reset_reason_raw
     entity_category: diagnostic
     accuracy_decimals: 0
@@ -134,7 +131,7 @@ sensor:
       return (float)esp_reset_reason();
 
   - platform: template
-    name: "WiFi Power Level"
+    name: "Wi-Fi Power Level"
     id: wifi_output_power_sensor
     entity_category: diagnostic
     unit_of_measurement: "dBm"

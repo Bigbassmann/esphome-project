@@ -6,10 +6,10 @@ external_components:
       path: custom_components/max17048_sensor
 
 max17048_sensor:
-  i2c_id: bus_a  # Matches your board package's I2C bus ID - address 0x36
+  i2c_id: bus_a  # I2C bus ID - address 0x36
   voltage:
-    name: "${device_name} Battery Voltage"
+    name: "Battery Voltage"
   soc:
-    name: "${device_name} Battery SOC"
+    name: "Battery SOC"
   rate:
-    name: "${device_name} Battery Charge Rate"
+    name: "Battery Charge Rate"

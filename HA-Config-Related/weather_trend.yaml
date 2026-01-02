@@ -1,0 +1,31 @@
+# weather_trend.yaml - HA-side dynamic icon for ESPHome weather trends (handles multiple devices)
+template:
+  - sensor:
+      # Loop over multiple devices dynamically (add more device names as needed)
+      - unique_id: weather_trend_dynamic # Optional: For HA entity registry
+        name: "Dynamic Weather Trend Summary" # Summary entity for all devices
+        state: >
+          {% set devices = ['supermini_2', 'supermini_1', 'xiao3_1', 'xiao3_2' 'd1_mini_1', 'other_device'] %}  # List your device names here
+          {% set trends = [] %}
+          {% for device in devices %}
+            {% set entity = 'sensor.' ~ device ~ '_weather_trend' %}
+            {% if states(entity) != 'unknown' and states(entity) != 'unavailable' %}
+              {% set trends = trends + [device ~ ': ' ~ states(entity)] %}
+            {% endif %}
+          {% endfor %}
+          {{ trends | join(' | ') if trends else 'No trends available' }}
+        icon: >
+          {% set devices = ['supermini_2', 'supermini_1', 'xiao3_1', 'xiao3_2' 'd1_mini_1', 'other_device'] %}  # Same list
+          {% set overall_trend = '' %}
+          {% for device in devices %}
+            {% set entity = 'sensor.' ~ device ~ '_weather_trend' %}
+            {% set trend = states(entity) %}
+            {% if 'Rising' in trend %}
+              {% set overall_trend = 'Rising' if overall_trend == '' else overall_trend %}
+            {% elif 'Falling' in trend %}
+              {% set overall_trend = 'Falling' %}
+            {% endif %}
+          {% endfor %}
+          {% if 'Rising' in overall_trend %} mdi:weather-sunny
+          {% elif 'Falling' in overall_trend %} mdi:weather-rainy
+          {% else %} mdi:weather-cloudy {% endif %}
