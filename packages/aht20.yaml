@@ -1,18 +1,30 @@
 sensor:
-  - platform: aht10   # 0x38
+  - platform: aht10
     variant: AHT20
-    id: aht20_sensor
+    address: 0x38  #default or 0x36
+    update_interval: 30s
     temperature:
-      name: "AQ Temp - AHT20"
-      id: fr_temp
+      name: "AQ Temp - AHT"
+      id: aht20_temp
       unit_of_measurement: "°F"
       accuracy_decimals: 1
       filters:
         - lambda: |-
             if (isnan(x)) return NAN;
             return x * (9.0/5.0) + 32.0;
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+   
     humidity:
-      name: "AQ Humidity - AHT20"
-      id: fr_humidity
+      name: "AQ Humidity - AHT"
+      id: aht20_humidity
       accuracy_decimals: 1
-    update_interval: 30s
+      filters:
+      - filter_out: 0.0
+      - median:
+          window_size: 3
+          send_every: 3
+          send_first_at: 1

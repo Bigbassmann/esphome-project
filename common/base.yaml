@@ -49,8 +49,7 @@ esphome:
               case ESP_SLEEP_WAKEUP_UART: wakeup_str = "UART"; break;
               default: wakeup_str = "Unknown"; break;
             }
-            ESP_LOGI("wakeup", "[BOOT] Wakeup cause: %d (%s) | GPIO1 state: %d", wakeup_cause, wakeup_str, gpio_get_level(GPIO_NUM_1));
-            // Publish to the new text_sensor if desired
+            ESP_LOGI("wakeup", "[BOOT] Wakeup cause: %d (%s)", wakeup_cause, wakeup_str);
             id(wakeup_cause_text).publish_state(wakeup_str);
           }
       - lambda: |-
@@ -98,6 +97,30 @@ esphome:
           then:
             - deep_sleep.prevent: deep_sleep_1
 #      - script.execute: mhz19_warmup
+interval:
+  - interval: 10s  # Runs shortly after boot; adjust interval as needed (e.g., 10s)
+    then:
+      - if:
+          condition:
+            lambda: 'return esp_reset_reason() == ESP_RST_DEEPSLEEP;'
+          then:
+            - lambda: |-
+                esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+                const char *wakeup_str;
+                switch (wakeup_cause) {
+                  case ESP_SLEEP_WAKEUP_UNDEFINED: wakeup_str = "Undefined"; break;
+                  case ESP_SLEEP_WAKEUP_ALL: wakeup_str = "All"; break;
+                  case ESP_SLEEP_WAKEUP_EXT0: wakeup_str = "EXT0 (Pin Wake)"; break;
+                  case ESP_SLEEP_WAKEUP_EXT1: wakeup_str = "EXT1"; break;
+                  case ESP_SLEEP_WAKEUP_TIMER: wakeup_str = "Timer"; break;
+                  case ESP_SLEEP_WAKEUP_TOUCHPAD: wakeup_str = "Touchpad"; break;
+                  case ESP_SLEEP_WAKEUP_ULP: wakeup_str = "ULP"; break;
+                  case ESP_SLEEP_WAKEUP_GPIO: wakeup_str = "GPIO"; break;
+                  case ESP_SLEEP_WAKEUP_UART: wakeup_str = "UART"; break;
+                  default: wakeup_str = "Unknown"; break;
+                }
+                ESP_LOGI("wakeup", "[LATE] Wakeup cause: %d (%s)", wakeup_cause, wakeup_str);
+                id(wakeup_cause_text).publish_state(wakeup_str);  //# Redundant but ensures publish post-WiFi
 
 wifi:
   ssid: !secret wifi_ssid  # Shared secret

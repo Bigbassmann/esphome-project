@@ -1,4 +1,26 @@
 #Seeed Studio XIAO ESP32-C3
+esphome:
+  on_boot:
+    priority: -200  # Executes after base.yaml's -100 priority
+    then:
+      - lambda: |-
+          esp_reset_reason_t reason = esp_reset_reason();
+          if (reason == ESP_RST_DEEPSLEEP) {
+            std::string pin_str = "${wakeup_pin}";
+            int wakeup_pin_num;
+            if (pin_str.rfind("GPIO", 0) == 0) {  // Check if starts with "GPIO"
+              wakeup_pin_num = atoi(pin_str.c_str() + 4);  // Skip "GPIO" and parse number
+            } else {
+              wakeup_pin_num = atoi(pin_str.c_str());  // Plain number
+            }
+            gpio_num_t pin = static_cast<gpio_num_t>(wakeup_pin_num);
+            ESP_LOGI("wakeup", "[BOOT] GPIO%d state at wakeup: %d", wakeup_pin_num, gpio_get_level(pin));
+          }
+      - delay: 30s  # Wait for PMS7003 warmup before sending active mode command
+      - uart.write:
+          id: pms  # Your pms_uart_id from the UART config
+          data: [0x42, 0x4D, 0xE1, 0x00, 0x01, 0x01, 0x71]   
+
 esp32:
   board: seeed_xiao_esp32c3
   variant: ESP32C3
@@ -7,9 +29,9 @@ esp32:
 
 substitutions:
   wakeup_pin: GPIO4  #A2/D2/ADC1_CH4, safe/Reset/UART1_TX
-  wakeup_pin_mode: INVERT_WAKEUP
+  wakeup_pin_mode: KEEP_AWAKE # KEEP_AWAKE, IGNORE, INVERT_WAKEUP
 #   usb_detect_pin: GPIO5 #ADC1_CH5, safe/D3 - was 9/USB power (e.g., high if powered)/wired to VBUS for battery monitor
-  stay_awake_pin: GPIO10 #D10/MOSI/Status LED/SPI
+  stay_awake_pin: GPIO10 # D10/MOSI/Status LED/SPI
   battery_adc_pin: GPIO3 #ADC1_CH3, safe/A1/D1/ADC1_CH3. Ideal for battery voltage (analog read with divider for 3.7V LiPo)
   i2c_sda_pin: GPIO6 #I2C SDA/D4
   i2c_scl_pin: GPIO7 #I2C SCL/D5
@@ -47,8 +69,10 @@ uart:
     rx_pin: ${pms_rx_pin}
     tx_pin: ${pms_tx_pin}
     baud_rate: ${pms_baud_rate}
+    rx_buffer_size: 512 # test 
     
   - id: ${mh_uart_id}
     rx_pin: ${mh_rx_pin}
     tx_pin: ${mh_tx_pin}
     baud_rate: ${mh_baud_rate}
+    rx_buffer_size: 512 # test 

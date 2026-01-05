@@ -1,0 +1,32 @@
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"  # Swap to "SSD1306 128x64" for the larger one
+    address: 0x3D
+    brightness: 100%
+    rotation: 0  # Try 90, 180, or 0 if upside down/mirrored
+    id: display1
+    update_interval: 1s  # For testing
+    lambda: |-
+      it.clear();
+
+      int center_x = it.get_width() / 2;
+      int center_y = it.get_height() / 2;
+      // int y_offset = 14;  // Adjust this (e.g., 24) to shift content down; set to 0 to disable
+
+      // Border (full screen)
+      it.rectangle(0, 0, it.get_width(), it.get_height(), COLOR_ON);
+
+      // Centered text tests (auto-scales positions)
+      it.print(center_x, 2, id(arial), TextAlign::TOP_CENTER, "Display Test");
+      it.print(center_x, center_y - 15, id(arial30), TextAlign::TOP_CENTER, "BIG");
+      it.print(center_x, it.get_height() - 12, id(arial10), TextAlign::TOP_CENTER, "Small text");
+
+      // Centered graphics
+      it.line(0, 0, it.get_width(), it.get_height(), COLOR_ON);  // Diagonal
+      it.circle(center_x, center_y, (it.get_height() / 4), COLOR_ON);  // Scaled circle (smaller on 64x48)
+
+      // Optional dynamic uptime (uncomment if esp_uptime sensor exists)
+      char buf[32];
+      sprintf(buf, "Up: %.0fs", id(esp_uptime).state);
+      it.print(center_x, center_y + 15, id(arial10), TextAlign::TOP_CENTER, buf);
+

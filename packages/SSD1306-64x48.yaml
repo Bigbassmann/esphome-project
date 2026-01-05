@@ -1,0 +1,42 @@
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 64x48"  # Swap to "SSD1306 128x64" for the larger one
+    address: 0x3C
+    brightness: 100%
+    rotation: 0  # Try 90, 180, or 0 if upside down/mirrored
+    id: display2
+    update_interval: 1s  # For testing
+    lambda: |-
+      it.clear();
+
+      int center_x = it.get_width() / 2;
+      int center_y = it.get_height() / 2;
+      // int y_offset = 34;  // Adjust this (e.g., 24) to shift content down; set to 0 to disable
+
+      // Thin border (1px inset to avoid edge artifacts)
+      it.rectangle(1, 1, it.get_width() - 2, it.get_height() - 2, COLOR_ON);
+
+      // Scaled-down text tests (centered, with small sizes to fit 48px height)
+      it.print(center_x, 5, id(arial10), TextAlign::TOP_CENTER, "Display Test");  // Smaller font, lower start
+      it.print(center_x, center_y - 5, id(arial), TextAlign::TOP_CENTER, "Mid");  // Medium size 15, centered
+      it.print(center_x, it.get_height() - 10, id(arial10), TextAlign::TOP_CENTER, "Small");  // Size 10 at bottom
+
+      // Minimal graphics (scaled small to fit)
+      it.line(0, 0, it.get_width(), it.get_height(), COLOR_ON);  // Diagonal
+      it.circle(center_x, center_y, 8, COLOR_ON);  // Small circle (radius 8px)
+
+      // Optional uptime (uncomment if esp_uptime sensor exists; fits in small space)
+      char buf[16];
+      sprintf(buf, "Up: %.0fs", id(esp_uptime).state);
+      it.print(center_x, center_y + 10, id(arial10), TextAlign::TOP_CENTER, buf);
+
+font:
+  - file: "fonts/Arial.ttf"
+    id: arial
+    size: 15
+  - file: "fonts/Arial.ttf"
+    id: arial30
+    size: 30
+  - file: "fonts/Arial.ttf"
+    id: arial10
+    size: 10    
