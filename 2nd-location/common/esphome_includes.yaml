@@ -1,0 +1,6 @@
+esphome:
+  includes:
+    - <esp_wifi.h>  # For esp_wifi_get_mac and esp_wifi_get_channel
+    - <cstdlib>  # For strtof (if needed elsewhere)
+    - <cstdio>  # Added: For snprintf
+    - <driver/gpio.h>  # For gpio_get_level (if needed elsewhere)

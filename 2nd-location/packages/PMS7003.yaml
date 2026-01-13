@@ -1,0 +1,43 @@
+# PMSX003 sensor referencing the PMS UART
+sensor:
+  - platform: pmsx003
+    type: PMSX003  # For PMS7003
+    uart_id: ${pms_uart_id}
+    update_interval: ${pms_update_interval}
+    pm_1_0:
+      name: AQ-PM 1.0
+      unit_of_measurement: "µg/m³"
+      accuracy_decimals: 2
+    pm_2_5:
+      name: AQ-PM 2.5
+      unit_of_measurement: "µg/m³"
+      accuracy_decimals: 2
+    pm_10_0:
+      name: AQ-PM 10.0
+      unit_of_measurement: "µg/m³"
+      accuracy_decimals: 2
+
+#### Additional Options
+#- **Particle Counts**: You can add sensors for raw particle counts (e.g., number of particles >0.3µm in 0.1L of air):
+#Standard vs. Atmospheric: By default, it reports atmospheric environment values. Add _std variants for CF-1 standard (e.g., pm_2_5_std)
+#Update Interval: Set to 0s for continuous mode (fan always on, shorter lifespan). For intervals >30s without tx_pin, the fan stays on.
+#Multiple UARTs: If using multiple UART devices, assign a uart_id to the UART block and reference it in the sensor (e.g., uart_id: uart_bus1).
+#
+    pm_0_3um:
+      name: "AQ Particles >0.3µm"
+      unit_of_measurement: "#/0.1L"
+    pm_0_5um:
+      name: "AQ Particles >0.5µm"
+      unit_of_measurement: "#/0.1L"
+    pm_1_0um:
+      name: "AQ Particles >1.0µm"
+      unit_of_measurement: "#/0.1L"
+    pm_2_5um:
+      name: "AQ Particles >2.5µm"
+      unit_of_measurement: "#/0.1L"
+    pm_5_0um:
+      name: "AQ Particles >5.0µm"
+      unit_of_measurement: "#/0.1L"        
+    pm_10_0um:
+      name: "AQ Particles >10.0µm"
+      unit_of_measurement: "#/0.1L"

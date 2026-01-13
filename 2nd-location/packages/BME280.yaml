@@ -1,0 +1,34 @@
+sensor:
+  - platform: bme280
+      temperature:
+        name: "AQ Temp - BME"
+        oversampling: 1x
+        id: temp
+        filters:
+          - offset: -1.5
+        on_value:
+          - lambda: |-
+              if(id(temp).state > id(temp_max)) { id(temp_max) = id(temp).state; }
+              if(id(temp).state < id(temp_min)) { id(temp_min) = id(temp).state; }
+      pressure:
+        name: "Air Pres - BME"
+        oversampling: 1x
+        id: press
+      humidity:
+        name: "AQ Humidity - BME"
+        oversampling: 1x
+        id: hum
+      address: 0x76
+      update_interval: 10s
+
+#sensor:
+#  - platform: bme280_i2c
+#    temperature:
+#      name: "BME280 Temperature"
+#      oversampling: 16x
+#    pressure:
+#      name: "BME280 Pressure"
+#    humidity:
+#      name: "BME280 Humidity"
+#    address: 0x76
+#    update_interval: 60s

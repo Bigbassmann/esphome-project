@@ -1,0 +1,6 @@
+
+globals:
+  - id: remote_pressure_global
+    type: float
+    restore_value: yes
+    initial_value: '0.0'

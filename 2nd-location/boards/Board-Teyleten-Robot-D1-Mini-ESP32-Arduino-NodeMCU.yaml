@@ -1,0 +1,74 @@
+# Board-Teyleten-Robot-D1-Mini-ESP32-Arduino-NodeMCU.yaml
+esphome:
+  on_boot:
+    priority: -200  # Executes after base.yaml's -100 priority
+    then:
+      - lambda: |-
+          esp_reset_reason_t reason = esp_reset_reason();
+          if (reason == ESP_RST_DEEPSLEEP) {
+            std::string pin_str = "${wakeup_pin}";
+            int wakeup_pin_num;
+            if (pin_str.rfind("GPIO", 0) == 0) {  // Check if starts with "GPIO"
+              wakeup_pin_num = atoi(pin_str.c_str() + 4);  // Skip "GPIO" and parse number
+            } else {
+              wakeup_pin_num = atoi(pin_str.c_str());  // Plain number
+            }
+            gpio_num_t pin = static_cast<gpio_num_t>(wakeup_pin_num);
+            ESP_LOGI("wakeup", "[BOOT] GPIO%d state at wakeup: %d", wakeup_pin_num, gpio_get_level(pin));
+          }
+      - delay: 30s  # Wait for PMS7003 warmup before sending active mode command
+      - uart.write:
+          id: pms  # Your pms_uart_id from the UART config
+          data: [0x42, 0x4D, 0xE1, 0x00, 0x01, 0x01, 0x71]    
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+    
+substitutions:
+  wakeup_pin: GPIO4  #Need to identify 
+  wakeup_pin_mode: INVERT_WAKEUP
+  usb_detect_pin: GPIO35 #          ADC1_CH5, safe/D3 - was 9/USB power (e.g., high if powered)/wired to VBUS for battery monitor
+  stay_awake_pin: GPIO5 #                 D10/MOSI/Status LED/SPI
+#  #battery_adc_pin: GPIO3 #ADC1_CH3, safe/A1/D1/ADC1_CH3. Ideal for battery voltage (analog read with divider for 3.7V LiPo)
+  i2c_sda_pin: GPIO21 #I2C SDA
+  i2c_scl_pin: GPIO22 #I2C SCL
+  status_led: GPIO2 #                    Safe for status LED/D10/MOSI/deepsleep wake
+  safe_boot_pin: GPIO0 #OK (input/output) no pin
+#  #pwm_output: GPIO3 #ADC1_CH3, safe/A1/D1/deepsleep wake
+#  #tx_pin: GPIO19 #tx_pin for CO2/ miso_pin?
+  mosi_pin: GPIO23 #
+  pms_rx_pin: GPIO18
+  pms_tx_pin: GPIO19
+  pms_baud_rate: 9600
+#  # UART for MH (e.g., MH-Z19)
+  mh_uart_id: mh
+  mh_rx_pin: GPIO16  # May conflict with USB serial; remap if needed (e.g., to GPIO16)
+  mh_tx_pin: GPIO17  # May conflict; remap if needed (e.g., to GPIO17)
+  mh_baud_rate: 9600
+#  # PMSX003 sensor settings
+  pms_update_interval: 30s
+  pms_pm10_name: "Air Quality-PM 10.0"
+  pms_pm2_5_name: "Air Quality-PM 2.5"
+  pms_pm1_name: "Air Quality-PM 1.0"
+  pms_uart_id: pms
+  
+i2c:  
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+  id: bus_a
+
+uart:
+  - id: ${pms_uart_id}
+    rx_pin: ${pms_rx_pin}
+    tx_pin: ${pms_tx_pin}
+    baud_rate: ${pms_baud_rate}
+    rx_buffer_size: 512 # test 
+    
+  - id: ${mh_uart_id}
+    rx_pin: ${mh_rx_pin}
+    tx_pin: ${mh_tx_pin}
+    baud_rate: ${mh_baud_rate}
+    rx_buffer_size: 512 # test 

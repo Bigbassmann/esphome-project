@@ -1,0 +1,253 @@
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: 240s
+  sleep_duration: 0s
+#  wakeup_pin: ${wakeup_pin}   #temp 1/9/2026
+#  wakeup_pin_mode: ${wakeup_pin_mode}   #temp 1/9/2026
+  
+globals:
+  - id: countdown_dur_seconds
+    type: int
+    restore_value: no
+    initial_value: '30'
+    
+  - id: sleep_allowed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+    
+  - id: countdown_seconds
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: run_min_seconds  # New: Dynamic run min from HA
+    type: int
+    restore_value: no
+    initial_value: '240'
+
+  - id: sleep_duration_seconds  # Dynamic sleep from HA
+    type: int
+    restore_value: no
+    initial_value: '120'
+
+  - id: is_sleeping
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+switch:
+  - platform: template
+    name: "Sleep Disable"
+    id: deep_sleep_override
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF  # Default off (allow sleep)
+    on_turn_on:
+      - lambda: |-
+          ESP_LOGI("override", "[OVERRIDE] Deep Sleep Override turned ON (blocking sleep)");
+          id(sleep_allowed) = false;
+    on_turn_off:
+      - lambda: |-
+          ESP_LOGI("override", "[OVERRIDE] Deep Sleep Override turned OFF (allowing sleep)");
+          id(sleep_allowed) = true;
+select:
+  - platform: template
+    name: "Sleep Countdown (sec)"
+    id: countdown_duration_select
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "1"
+      - "5"
+      - "10"
+      - "20"
+      - "30"
+      - "60"
+      - "120"
+    initial_option: "30"  # Default
+    on_value:
+      - lambda: |-
+          id(countdown_dur_seconds) = atoi(x.c_str());
+          ESP_LOGI("config", "[CONFIG] Countdown duration updated to %d seconds", id(countdown_dur_seconds));
+          
+  - platform: template
+    name: "Sleep Wake/Run Duration (sec)"
+    id: run_duration_select
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "240"
+      - "300"
+      - "420"
+      - "600"
+      - "1800"
+      - "7200"
+      - "14400"
+    initial_option: "240"  # Default and Minimum
+    on_value:
+      - lambda: |-
+          id(run_min_seconds) = atoi(x.c_str());
+          ESP_LOGI("config", "[CONFIG] Run min duration updated to %d seconds", id(run_min_seconds));
+
+  - platform: template
+    name: "Sleep Duration (sec)"
+    id: sleep_duration_select
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "60"
+      - "120"
+      - "240"
+      - "300"
+      - "600"
+      - "1800"
+      - "7200"
+      - "14400"
+    initial_option: "120"  # Default
+    on_value:
+      - lambda: |-
+          id(sleep_duration_seconds) = atoi(x.c_str());
+          ESP_LOGI("config", "[CONFIG] Sleep duration updated to %d seconds", id(sleep_duration_seconds));
+sensor:
+  - platform: template  # New: Countdown sensor (shows seconds to sleep during countdown; 0 otherwise).
+    name: "Sleep Countdown"
+    id: time_to_sleep
+    entity_category: ""
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    lambda: |-
+      return id(countdown_seconds);
+    update_interval: never  # Updated per recommendations to fix constant 0s logging; publish via lambda only during countdown.
+
+  - platform: template
+    name: "Sleep - Awake Duration"
+    id: active_run_duration
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    lambda: |-
+      return !id(is_sleeping) ? (esphome::millis() / 1000.0f) : 0;
+    update_interval: 10s
+
+  - platform: template
+    name: "Sleep Duration"
+    id: active_sleep_duration
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    lambda: |-
+      return id(is_sleeping) ? id(sleep_duration_seconds) : 0;
+    update_interval: 10s
+    
+interval:
+  - interval: 30s  # Periodic state dump
+    then:
+      - lambda: |-
+          ESP_LOGI("state", "[STATE] Uptime: %.1fs | Sleep allowed: %s | Override: %s | Countdown: %d s | Run Min: %d s | Sleep Dur: %d s",
+                   esphome::millis() / 1000.0f,  // Real-time uptime
+                   id(sleep_allowed) ? "YES" : "NO",
+                   id(deep_sleep_override).state ? "ON" : "OFF", // Use local switch
+                   id(countdown_seconds),
+                   id(run_min_seconds),
+                   id(sleep_duration_seconds));
+  - interval: 10s  # Heartbeat and auto-sleep check
+    then:
+      - lambda: |-
+          bool override_on = id(deep_sleep_override).state; // Local switch
+
+          id(sleep_allowed) = !override_on; // Simple: override on = block sleep
+
+          ESP_LOGD("override", "[HEARTBEAT] Override state: %s",
+                   override_on ? "ON" : "OFF");
+          ESP_LOGD("sleep", "[HEARTBEAT] sleep_allowed=%s",
+                   id(sleep_allowed) ? "true" : "false");
+
+          if (id(sleep_allowed)) {
+            ESP_LOGD("phase4_5", "[HEARTBEAT] Deep sleep ALLOWED.");
+          } else {
+            ESP_LOGD("phase4_5", "[HEARTBEAT] Deep sleep PREVENTED (override on).");
+          }
+
+          ESP_LOGI("wifi", "[HEARTBEAT] WiFi RSSI: %.0f dBm", id(wi_fi_signal).state);
+
+          if (id(countdown_seconds) < 0) {
+            id(countdown_seconds) = 0;
+            ESP_LOGW("sleep", "[HEARTBEAT] Resetting negative countdown to 0");
+          }
+
+          float current_uptime = esphome::millis() / 1000.0f;  // Real-time uptime
+          ESP_LOGD("sleep", "[AUTO] Current uptime: %.1fs (min required: %d s)", current_uptime, id(run_min_seconds));
+
+            // Auto-sleep logic: trigger countdown after min run time if allowed and not already counting
+          if (id(sleep_allowed) && current_uptime >= id(run_min_seconds) && id(countdown_seconds) == 0) {
+            id(countdown_seconds) = id(countdown_dur_seconds); // Start countdown with selected duration
+            auto time_now = id(sntp_time).now();
+            ESP_LOGW("sleep", "[AUTO] Min run time passed → countdown started. Sleeping for %d seconds at %04d-%02d-%02d %02d:%02d:%02d",
+                     id(sleep_duration_seconds),
+                     time_now.year, time_now.month, time_now.day_of_month,
+                     time_now.hour, time_now.minute, time_now.second);
+            id(time_to_sleep).publish_state(id(countdown_seconds));
+          } else if (!id(sleep_allowed)) {
+            ESP_LOGW("sleep", "[AUTO] Automatic sleep BLOCKED — override on.");
+          } else {
+            ESP_LOGD("sleep", "[AUTO] Not starting countdown yet — uptime: %.1fs, countdown: %d", current_uptime, id(countdown_seconds));
+          }
+
+      - if:
+          condition:
+            lambda: |-
+              return id(sleep_allowed) && id(countdown_seconds) == 0 && (esphome::millis() / 1000) >= id(run_min_seconds);
+          then:
+            - lambda: 'id(is_sleeping) = true;'
+            - lambda: 'id(active_sleep_duration).publish_state(id(sleep_duration_seconds));'
+            - delay: 500ms
+            - deep_sleep.enter:
+                id: deep_sleep_1
+                sleep_duration: !lambda 'return id(sleep_duration_seconds) * 1000;'
+      - deep_sleep.prevent: deep_sleep_1
+
+  - interval: 1s  # Countdown decrement and enter
+    then:
+      - if:
+          condition:
+            lambda: 'return id(countdown_seconds) > 0;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(sleep_allowed);'
+                then:
+                  - lambda: |-
+                      ESP_LOGW("sleep", "[COUNTDOWN] Aborting countdown — sleep no longer allowed (override changed).");
+                      id(countdown_seconds) = 0;
+                      id(time_to_sleep).publish_state(0);
+                      id(active_sleep_duration).publish_state(0);
+                  - deep_sleep.prevent: deep_sleep_1
+            - lambda: |-
+                if (id(countdown_seconds) > 0) {
+                  id(countdown_seconds)--;
+                } else {
+                  id(countdown_seconds) = 0;
+                }
+                auto time_now = id(sntp_time).now();
+                ESP_LOGI("sleep", "[COUNTDOWN] Sleeping in %d s at %04d-%02d-%02d %02d:%02d:%02d",
+                         id(countdown_seconds),
+                         time_now.year, time_now.month, time_now.day_of_month,
+                         time_now.hour, time_now.minute, time_now.second);
+                id(time_to_sleep).publish_state(id(countdown_seconds));
+            - if:
+                condition:
+                  lambda: 'return id(countdown_seconds) == 0 && id(sleep_allowed);'
+                then:
+                  - lambda: |-
+                      ESP_LOGW("sleep", "[COUNTDOWN] Entering deep sleep NOW (confirmed allowed).");
+                  - lambda: 'id(is_sleeping) = true;'
+                  - lambda: 'id(active_sleep_duration).publish_state(id(sleep_duration_seconds));'
+# temp 1/9/2026                  - lambda: 'id(display1).turn_off();'
+                  - delay: 500ms
+                  - deep_sleep.enter:
+                      id: deep_sleep_1
+                      sleep_duration: !lambda 'return id(sleep_duration_seconds) * 1000;'

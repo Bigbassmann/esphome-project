@@ -1,0 +1,199 @@
+esphome:
+  includes:
+    - <esp_wifi.h>  # For esp_wifi_get_mac and esp_wifi_get_channel
+    - <cstdlib>  # For strtof (if needed elsewhere)
+    - <cstdio>  # Added: For snprintf
+    - <driver/gpio.h>  # For gpio_get_level (if needed elsewhere)
+  
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          ESP_LOGI("boot", "[BOOT] Device booting...");
+          const char *reason_str;
+          esp_reset_reason_t reason = esp_reset_reason();
+          switch (reason) {
+            case ESP_RST_UNKNOWN: reason_str = "Unknown"; break;
+            case ESP_RST_POWERON: reason_str = "Power On"; break;
+            case ESP_RST_EXT: reason_str = "External Reset"; break;
+            case ESP_RST_SW: reason_str = "Software Reset"; break;
+            case ESP_RST_PANIC: reason_str = "Panic"; break;
+            case ESP_RST_INT_WDT: reason_str = "Interrupt WDT"; break;
+            case ESP_RST_TASK_WDT: reason_str = "Task WDT"; break;
+            case ESP_RST_WDT: reason_str = "Other WDT"; break;
+            case ESP_RST_DEEPSLEEP: reason_str = "Deep Sleep Wake"; break;
+            case ESP_RST_BROWNOUT: reason_str = "Brownout"; break;
+            case ESP_RST_SDIO: reason_str = "SDIO"; break;
+            case ESP_RST_USB: reason_str = "USB"; break;
+            case ESP_RST_JTAG: reason_str = "JTAG"; break;
+            case ESP_RST_EFUSE: reason_str = "Efuse"; break;
+            case ESP_RST_PWR_GLITCH: reason_str = "Power Glitch"; break;
+            case ESP_RST_CPU_LOCKUP: reason_str = "CPU Lockup"; break;
+            default: reason_str = "Unknown"; break;
+          }
+          ESP_LOGI("reset", "[BOOT] Reset reason: %d (%s)", reason, reason_str);
+          id(esp_reset_reason_text).publish_state(reason_str);
+          ESP_LOGI("boot", "[BOOT] Initial uptime: %.1fs", id(esp_uptime).state);
+
+          // Detailed wakeup cause if from deep sleep
+          if (reason == ESP_RST_DEEPSLEEP) {
+            esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+            const char *wakeup_str;
+            switch (wakeup_cause) {
+              case ESP_SLEEP_WAKEUP_UNDEFINED: wakeup_str = "Undefined"; break;
+              case ESP_SLEEP_WAKEUP_ALL: wakeup_str = "All"; break;
+              case ESP_SLEEP_WAKEUP_EXT0: wakeup_str = "EXT0 (Pin Wake)"; break;
+              case ESP_SLEEP_WAKEUP_EXT1: wakeup_str = "EXT1"; break;
+              case ESP_SLEEP_WAKEUP_TIMER: wakeup_str = "Timer"; break;
+              case ESP_SLEEP_WAKEUP_TOUCHPAD: wakeup_str = "Touchpad"; break;
+              case ESP_SLEEP_WAKEUP_ULP: wakeup_str = "ULP"; break;
+              case ESP_SLEEP_WAKEUP_GPIO: wakeup_str = "GPIO"; break;
+              case ESP_SLEEP_WAKEUP_UART: wakeup_str = "UART"; break;
+              default: wakeup_str = "Unknown"; break;
+            }
+            ESP_LOGI("wakeup", "[BOOT] Wakeup cause: %d (%s)", wakeup_cause, wakeup_str);
+            id(wakeup_cause_text).publish_state(wakeup_str);
+          }
+      - lambda: |-
+          id(sleep_allowed) = !id(deep_sleep_override).state; // Set based on local switch (off = allow)
+          ESP_LOGI("sleep", "[BOOT] Deep sleep %s at boot (based on local override).",
+                  id(sleep_allowed) ? "ALLOWED" : "PREVENTED");
+      - lambda: |-
+          std::string opt = id(logger_level_select).current_option();
+          int level = ESPHOME_LOG_LEVEL_VERBOSE; // Default
+          if (opt == "NONE") level = ESPHOME_LOG_LEVEL_NONE;
+          else if (opt == "ERROR") level = ESPHOME_LOG_LEVEL_ERROR;
+          else if (opt == "WARN") level = ESPHOME_LOG_LEVEL_WARN;
+          else if (opt == "INFO") level = ESPHOME_LOG_LEVEL_INFO;
+          else if (opt == "DEBUG") level = ESPHOME_LOG_LEVEL_DEBUG;
+          else if (opt == "VERBOSE") level = ESPHOME_LOG_LEVEL_VERBOSE;
+          else if (opt == "VERY_VERBOSE") level = ESPHOME_LOG_LEVEL_VERY_VERBOSE;
+          esphome::logger::global_logger->set_log_level(level);
+          ESP_LOGI("boot", "[BOOT] Restored logger level: %s", opt.c_str());
+      
+      - lambda: |-
+          // Added: Sync select if unrestored/empty (avoids NA, ensures default)
+          const char* current_opt = id(wifi_power_level_select).current_option();  //# Changed: const char*
+          if (current_opt == nullptr || current_opt[0] == '\0') {
+            id(wifi_power_level_select).make_call().set_option("20.0").perform();  //# Changed: Proper set method
+          }
+      - lambda: |-
+          // Updated: Set TX power from select (source of truth)
+          const char* opt = id(wifi_power_level_select).current_option();  //# Changed: const char*
+          if (opt != nullptr && opt[0] != '\0') {
+            char *endptr;
+            float power_dbm = strtof(opt, &endptr);  //# Changed: Safe parse (no exceptions)
+            if (endptr != opt && *endptr == '\0') {  //# Validity check
+              int8_t power_quarter = static_cast<int8_t>(power_dbm * 4);
+              esp_wifi_set_max_tx_power(power_quarter);
+              id(wifi_output_power_sensor).publish_state(power_dbm);  // Ensure sensor publishes on boot
+            } else {
+              ESP_LOGW("boot", "[BOOT] Invalid WiFi power option: %s", opt);
+            }
+          } else {
+            ESP_LOGW("boot", "[BOOT] WiFi power option empty; skipping set.");
+          }
+      - if:
+          condition:
+            lambda: 'return !id(sleep_allowed);'
+          then:
+            - deep_sleep.prevent: deep_sleep_1
+
+interval:
+  - interval: 10s  # Runs shortly after boot; adjust interval as needed (e.g., 10s)
+    then:
+      - if:
+          condition:
+            lambda: 'return esp_reset_reason() == ESP_RST_DEEPSLEEP;'
+          then:
+            - lambda: |-
+                esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+                const char *wakeup_str;
+                switch (wakeup_cause) {
+                  case ESP_SLEEP_WAKEUP_UNDEFINED: wakeup_str = "Undefined"; break;
+                  case ESP_SLEEP_WAKEUP_ALL: wakeup_str = "All"; break;
+                  case ESP_SLEEP_WAKEUP_EXT0: wakeup_str = "EXT0 (Pin Wake)"; break;
+                  case ESP_SLEEP_WAKEUP_EXT1: wakeup_str = "EXT1"; break;
+                  case ESP_SLEEP_WAKEUP_TIMER: wakeup_str = "Timer"; break;
+                  case ESP_SLEEP_WAKEUP_TOUCHPAD: wakeup_str = "Touchpad"; break;
+                  case ESP_SLEEP_WAKEUP_ULP: wakeup_str = "ULP"; break;
+                  case ESP_SLEEP_WAKEUP_GPIO: wakeup_str = "GPIO"; break;
+                  case ESP_SLEEP_WAKEUP_UART: wakeup_str = "UART"; break;
+                  default: wakeup_str = "Unknown"; break;
+                }
+                ESP_LOGI("wakeup", "[LATE] Wakeup cause: %d (%s)", wakeup_cause, wakeup_str);
+                id(wakeup_cause_text).publish_state(wakeup_str);  //# Redundant but ensures publish post-WiFi
+  - interval: 15s
+    then:
+      - lambda: |-
+          uint8_t mac[6];
+          esp_wifi_get_mac(WIFI_IF_STA, mac);
+          char mac_str[18];
+          snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+          ESP_LOGI("boot", "WiFi MAC Address: %s", mac_str);
+
+          uint8_t channel;
+          wifi_second_chan_t second;  // Unused, but required for the function
+          esp_wifi_get_channel(&channel, &second);
+          ESP_LOGI("boot", "WiFi Channel: %d", channel);
+
+wifi:
+  ssid: !secret wifi_ssid  # Shared secret
+  password: !secret wifi_password  # Shared
+  power_save_mode: none  # Default; override in mains if needed
+  ap:
+    ssid: "Fallback Hotspot"  # Default; use substitutions in mains for unique
+    password: "12345678"  # Default
+  on_disconnect:
+    - lambda: |-
+        ESP_LOGW("wifi", "[Wi-Fi] WiFi disconnected - falling back to AP mode for reprovisioning.");
+
+sensor:
+  - platform: uptime
+    name: "ESP Uptime"
+    id: esp_uptime
+    entity_category: diagnostic
+    accuracy_decimals: 2
+    update_interval: 30s
+
+  - platform: internal_temperature
+    name: "Temp - ESP Circuit Board"
+    id: sys_esp_temperature
+    entity_category: ""
+    unit_of_measurement: °F
+    filters:
+       - lambda: return x * (9.0/5.0) + 32.0;
+
+  - platform: wifi_signal
+    name: "Wi-Fi Signal"
+    id: wi_fi_signal
+    update_interval: 30s
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "Wi-Fi IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "Wi-Fi SSID"
+      entity_category: diagnostic
+    bssid:
+      name: "Wi-Fi BSSID"
+      entity_category: diagnostic
+
+time:
+  - platform: sntp
+    id: sntp_time
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+button:
+  - platform: restart
+    name: "ESP Restart"
+    entity_category: config
+
+  - platform: factory_reset
+    name: "ESP Factory Reset"
+    entity_category: config

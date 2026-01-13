@@ -1,0 +1,102 @@
+# Define and share the battery sensor
+packet_transport: !extend
+  sensors:
+    ${device_name}_bmp_pressure:  # Unique key using substitution (e.g., main1_bat_v_1)
+      sensor:
+        platform: bmp280_i2c  # Your sensor config
+#        address: 0x36
+        id: ${device_name}_bmp_pressure  # Unique ID for referencing
+        internal: true  # Hide from HA by default
+        name: ATMOS Pressure ${friendly_name} 
+        # Add name:, filters, etc., if needed
+
+sensor:
+  - platform: bmp280_i2c  #default 0x76
+    address: 0x77 # 0x76 or 0x77
+    update_interval: 60s
+    iir_filter: 2x  # Add this: Low-pass filter (options: OFF, 2x, 4x, 8x, 16x)
+    temperature:
+      name: "AQ Temp - BMP"
+      oversampling: 2x
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+    pressure:
+      name: "AQ Pressure - BMP"
+      id: bmp_pressure
+
+  - platform: aht10
+    variant: AHT20
+    address: 0x38  #default
+    update_interval: 60s
+    temperature:
+      name: "AQ Temp - AHT"
+      id: aht20_temp
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+   
+    humidity:
+      name: "AQ Humidity - AHT"
+      id: aht20_humidity
+      accuracy_decimals: 1
+      filters:
+      - filter_out: 0.0
+      - median:
+          window_size: 3
+          send_every: 3
+          send_first_at: 1
+
+  - platform: template
+#    name: "Temp for Cal - AHT"  # Optional: For visibility in dashboard
+    id: aht20_temp_c
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      // Convert Fahrenheit back to Celsius (adjust if AHT20 is already in °C)
+      return (id(aht20_temp).state - 32.0) * (5.0 / 9.0);
+
+globals:
+  - id: prev_pressure  # Store previous pressure
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: pressure_delta  # Store delta for trends
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+
+text_sensor:
+  - platform: template
+    name: "AQ Weather Trend - SGP"
+    id: weather_trend
+    update_interval: 15min
+#    icon: "mdi:weather-partly-cloudy"  # Static icon
+    lambda: |-
+      float current_pressure = id(bmp_pressure).state;
+      if (current_pressure == NAN || id(prev_pressure) == 0.0) {
+        id(prev_pressure) = current_pressure;
+        id(pressure_delta) = 0.0;
+        return esphome::optional<std::string>("Calibrating...");
+      }
+      id(pressure_delta) = (current_pressure - id(prev_pressure)) / (15.0 / 60.0);
+      id(prev_pressure) = current_pressure;
+      if (id(pressure_delta) > 0.5) {
+        return esphome::optional<std::string>("Rising - Fair Weather Improving");
+      } else if (id(pressure_delta) < -0.5) {
+        return esphome::optional<std::string>("Falling - Weather Worsening (Storm Possible)");
+      } else {
+        return esphome::optional<std::string>("Stable - Steady Conditions");
+      }

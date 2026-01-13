@@ -1,0 +1,19 @@
+sensor:
+  - platform: sgp30  #default address 0x58
+    eco2:
+      name: "AQ eCO2 - SGP"
+      accuracy_decimals: 1
+      id: eco2
+    tvoc:
+      name: "AQ sTVOC - SGP"
+      accuracy_decimals: 1
+      id: tvoc
+    update_interval: 60s
+    store_baseline: true
+#       #https://esphome.io/components/sensor/sgp30.html#calibrating-baseline
+    baseline:
+      eco2_baseline: 0x92B7
+      tvoc_baseline: 0x935A
+    compensation:
+      temperature_source: aht20_temp_c
+      humidity_source: aht20_humidity

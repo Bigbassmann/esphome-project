@@ -1,0 +1,786 @@
+substitutions:   # .yaml
+  device_name: "esp32-2"  #"enviro-phat-esp32" #"esp32-2"
+  friendly_name: Enviro pHAT ESP32 (151) #ESP32-2 (151)
+  api_key: "d34fPlEMAtK3kx65TrygHQsTHID2DrSbYXZimY7UobU="  #"EmrlF+oSzREdx9za2vkvF7igU3WeQpVfsDuw9aNf/4E="  # Disables API encryption for testing
+  ota_password: "19a7e1f0611fa48fd837744bfb3cf01f"   #"41def07295f8022fbb33225b9baa335a"  # Secure OTA password
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  wifi_power_save_mode: LIGHT # NONE, LIGHT, MODEM
+  wifi_use_address: 192.168.119.151  #
+  manual_ip_static_ip: 192.168.119.151 # 192.168.119.151
+  manual_ip_gateway: 192.168.119.1
+  manual_ip_subnet: 255.255.255.0
+  ap_ssid: "Esp32-2 Fallback Hotspot"  #"Xiao32-C3-3-004 Fallback Hotspot" #
+  ap_password: "eObcKEh48Q1A"  #"cDz18PDbhSop" #
+  espnow_id: esp32_2_151  # No hyphens or spaces; valid C++ identifier
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+#  on_boot:  # Force backlight on at boot
+#    priority: -100.0
+#    then:
+#      - light.turn_on: backlight
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  baud_rate: 0
+  level: DEBUG  #VERY_VERBOSE
+# Enable Home Assistant API
+api:
+  encryption:
+    key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: ${wifi_power_save_mode}
+  use_address: ${wifi_use_address}
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+
+  # Fallback to AP if WiFi connection fails
+  manual_ip:  # Optional for fixed IP after setup
+    static_ip: ${manual_ip_static_ip}
+    gateway: ${manual_ip_gateway}
+    subnet: ${manual_ip_subnet}
+
+captive_portal:
+
+mdns:
+  disabled: false
+
+web_server:
+  port: 80
+  include_internal: true  
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+
+uart:
+  id: uart_pms
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 9600
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+
+#font:
+#  - file: "fonts/RobotoMonoNerdFontPropo-Regular.ttf"   #"fonts/Arial.ttf"   #"fonts/materialdesignicons-webfont.ttf"  #"fonts/Arial.ttf'  #"fonts/Roboto-Medium.ttf"
+#    id: material_font  #user_font
+#    size: 20
+
+font:
+  - file: "fonts/RobotoMonoNerdFontPropo-Regular.ttf"
+    id: user_font   #nerd_font
+    size: 18  # Test 16–22; larger = crisper but uses more RAM
+
+  # Optional: Limit to needed glyphs/icons to reduce size even more
+    glyphs:
+      - "0123456789"  # Numbers
+      - "ABCDEFGHIJKLMNOPQRSTUVWXYZ"  # Uppercase letters
+      - "abcdefghijklmnopqrstuvwxyz"  # Lowercase letters
+      - "°%µ"  # Degree, percent, micro
+      - ".:/ "  # Common symbols
+      - "\uf2c7"  # Thermometer (U+F2C7)
+      - "\uf2c9"  # Water drop (U+F2C9)
+      - "#"                       # ← Add this line – fixes the warning
+      # You can also add more if you plan to use them later, e.g.:
+      - "-+"                     # for trends/arrows if needed
+      - "μ"                       # if you ever want the real micro symbol instead of µ
+      - "Ω"
+      - "³"
+      # Add more as needed    
+
+globals:
+  - id: cycle_count_target
+    type: int
+    restore_value: yes
+    initial_value: '5'          # default = 5 full cycles
+  - id: cycle_count_current
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: mode_interval_seconds
+    type: int
+    restore_value: yes
+    initial_value: '5'          # default = 5 seconds per mode
+  - id: current_mode
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: last_switch
+    type: unsigned long
+    restore_value: no
+    initial_value: '0'
+  - id: cycling_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'  # New global for tracking cycling state
+  # Calibration baselines (R0 in ohms; calibrate in clean air and adjust via HA)
+  - id: r0_red
+    type: float
+    restore_value: yes
+    initial_value: '200000.0'  # Example for reducing (CO); adjust per sensor
+  - id: r0_ox
+    type: float
+    restore_value: yes
+    initial_value: '20000.0'   # Example for oxidizing (NO2)
+  - id: r0_nh3
+    type: float
+    restore_value: yes
+    initial_value: '750000.0'  # Example for NH3
+
+ads1115:
+  address: 0x49
+  continuous_mode: false
+
+select:
+  - platform: template
+    name: "Display Cycle Count"
+    id: display_cycle_count
+    icon: "mdi:repeat"
+    optimistic: true
+    restore_value: true
+    options:
+      - "1"
+      - "3"
+      - "5"
+      - "7"
+      - "9"
+      - "11"
+    initial_option: "5"
+    on_value:
+      then:
+        - lambda: |-
+            id(cycle_count_target) = atoi(x.c_str());
+
+  - platform: template
+    name: "Display Mode Interval"
+    id: display_mode_interval
+    icon: "mdi:clock-fast"
+    optimistic: true
+    restore_value: true
+    options:
+      - "3"
+      - "5"
+      - "7"
+      - "9"
+    initial_option: "5"
+    on_value:
+      then:
+        - lambda: |-
+            id(mode_interval_seconds) = atoi(x.c_str());
+
+binary_sensor:
+  - platform: gpio
+    pin: GPIO35
+    name: "Proximity Trigger"  # Optional binary for manual triggering in HA
+    id: proximity_trigger
+    device_class: motion  # Treat as motion for HA automations
+    filters:
+      - delayed_off: 500ms  # Debounce equivalent
+    on_press:
+      then:
+        - lambda: |-
+            if (id(backlight).current_values.is_on()) {
+              id(backlight).turn_off();
+              id(cycling_active) = false;
+            } else {
+              id(backlight).turn_on();
+              id(cycling_active) = true;
+              id(current_mode) = 0;
+            }
+
+text_sensor:
+  - platform: template
+    name: "Current Display Content"
+    id: current_display
+    lambda: |-
+      if (!id(backlight).current_values.is_on()) {
+        return std::string("Off");
+      }
+      int mode = id(current_mode);
+      std::string variable;
+      float data = 0.0;
+      std::string unit;
+      switch (mode) {
+        case 0: variable = "Temp"; data = id(temp_sensor).state; unit = "°F"; break;
+        case 1: variable = "Humi"; data = id(hum_sensor).state; unit = "%"; break;
+        case 2: variable = "Pres"; data = id(press_sensor).state; unit = "hPa"; break;
+        case 3: variable = "Ligh"; data = id(light_sensor).state; unit = "Lux"; break;
+        case 4: variable = "Oxi "; data = id(ox_raw).state; unit = "kΩ"; break;
+        case 5: variable = "Redu"; data = id(red_raw).state; unit = "kΩ"; break;
+        case 6: variable = "NH3 "; data = id(nh3_raw).state; unit = "kΩ"; break;
+        case 7: variable = "PM1 "; data = id(pm1_sensor).state; unit = "µg/m³"; break;
+        case 8: variable = "PM25"; data = id(pm25_sensor).state; unit = "µg/m³"; break;
+        case 9: variable = "PM10"; data = id(pm10_sensor).state; unit = "µg/m³"; break;
+        case 10: variable = "PM1 AQI"; data = id(pm1_aqi).state; unit = ""; break;  
+        case 11: variable = "PM25 AQI"; data = id(pm25_aqi).state; unit = ""; break; 
+        case 12: variable = "PM10 AQI"; data = id(pm10_aqi).state; unit = ""; break;
+        case 13: variable = "PM0.3 #"; data = id(pm0_3_sensor).state; unit = "#/0.1L"; break;
+        case 14: variable = "PM0.5 #"; data = id(pm0_5_sensor).state; unit = "#/0.1L"; break;
+        case 15: variable = "PM1.0 #"; data = id(pm1_0_sensor).state; unit = "#/0.1L"; break;
+        case 16: variable = "PM2.5 #"; data = id(pm2_5_sensor).state; unit = "#/0.1L"; break;
+        case 17: variable = "PM5.0 #"; data = id(pm5_0_sensor).state; unit = "#/0.1L"; break;
+        case 18: variable = "PM10 #"; data = id(pm10_0_sensor).state; unit = "#/0.1L"; break;
+      }
+      char buf[50];
+      snprintf(buf, sizeof(buf), "%s: %.1f %s", variable.c_str(), data, unit.c_str());
+      return std::string(buf);
+    update_interval: 1s
+
+sensor:
+  - platform: ads1115
+    multiplexer: 'A0_GND'  # Oxidising (e.g., NO2)
+    gain: 6.144
+    name: "Oxidising Resistance"
+    id: ox_raw
+    unit_of_measurement: "kΩ"
+    resolution: 12_bits
+    update_interval: 5s
+    filters:
+      - lambda: |-
+          if (x > 0) {
+            return (3.3 / x - 1.0) * 10.0;  //# Rload = 10kΩ, adjust per datasheet
+          }
+          return 0;
+
+  - platform: ads1115
+    multiplexer: 'A1_GND'  # Reducing (e.g., CO)
+    gain: 6.144
+    name: "Reducing Resistance"
+    id: red_raw
+    unit_of_measurement: "kΩ"
+    resolution: 12_bits
+    update_interval: 5s
+    filters:
+      - lambda: |-
+          if (x > 0) {
+            return (3.3 / x - 1.0) * 10.0;
+          }
+          return 0;
+
+  - platform: ads1115
+    multiplexer: 'A2_GND'  # NH3
+    gain: 6.144
+    name: "NH3 Resistance"
+    id: nh3_raw
+    unit_of_measurement: "kΩ"
+    resolution: 12_bits
+    update_interval: 5s
+    filters:
+      - lambda: |-
+          if (x > 0) {
+            return (3.3 / x - 1.0) * 10.0;
+          }
+          return 0;
+
+  - platform: bme280_i2c
+    address: 0x76
+    update_interval: 5s
+    temperature:
+      name: "Temperature"
+      id: temp_sensor
+      unit_of_measurement: "°F"
+      filters:
+        - offset: 0.0  # Calibrate if needed (e.g., CPU heat compensation)
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+    pressure:
+      name: "Pressure"
+      id: press_sensor
+    humidity:
+      name: "Humidity"
+      id: hum_sensor
+
+  - platform: ltr_als_ps
+    type: ALS_PS  # For LTR559 (integrated ALS + PS)
+    address: 0x23  # Default for ALS_PS; explicit for clarity
+    update_interval: 1s
+    ambient_light:
+      name: "Light"
+      id: light_sensor
+    ps_counts:
+      name: "Proximity"
+      id: prox_sensor
+    ps_high_threshold: 20  # Equivalent to 'above: 1500'; lower if needed for testing
+    on_ps_high_threshold:
+      then:
+        - lambda: |-
+            unsigned long now = millis();
+            if (now - id(last_switch) > 500) {  //# 500ms debounce
+              id(cycling_active) = true;
+              id(current_mode) = 0;
+              id(last_switch) = now;
+            }
+            ESP_LOGD("main", "Prox: %.0f", id(prox_sensor).state);
+        - light.turn_on: backlight  # Added: Turn on backlight on proximity trigger    
+
+  - platform: pmsx003
+    type: PMSX003  #PMSX003  #PMS5003ST
+    uart_id: uart_pms
+    update_interval: 60s
+#    reset_pin: GPIO26  # Added for hardware reset
+#    enable_pin: GPIO27  # Added for SET/enable control (e.g., active/passive mode)
+    pm_1_0:
+      name: "PM <1.0µm Concentration"
+      id: pm1_sensor
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_2_5:
+      name: "PM <2.5µm Concentration"
+      id: pm25_sensor
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_10_0:
+      name: "PM <10.0µm Concentration"
+      id: pm10_sensor
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_0_3um:
+      name: "AQ Particles >0.3µm"
+      id: pm0_3_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_0_5um:
+      name: "AQ Particles >0.5µm"
+      id: pm0_5_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_1_0um:
+      name: "AQ Particles >1.0µm"
+      id: pm1_0_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_2_5um:
+      name: "AQ Particles >2.5µm"
+      id: pm2_5_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_5_0um:
+      name: "AQ Particles >5.0µm"
+      id: pm5_0_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10
+    pm_10_0um:
+      name: "AQ Particles >10.0µm"
+      id: pm10_0_sensor
+      unit_of_measurement: "#/0.1L"
+      filters:
+        - sliding_window_moving_average:
+            window_size: 10
+            send_every: 10  
+
+  # Calibrated ppm sensors (template; uses Rs in ohms)
+  - platform: template
+    name: "CO PPM"
+    id: co_ppm
+    unit_of_measurement: "ppm"
+    update_interval: 5s
+    lambda: |-
+      float rs = id(red_raw).state * 1000.0;  //# Convert kΩ to Ω
+      if (rs > 0 && id(r0_red) > 0) {
+        float ratio = rs / id(r0_red);
+        return pow(10.0, -1.25 * log10(ratio) + 0.64);
+      }
+      return 0.0;
+
+  - platform: template
+    name: "NO2 PPM"
+    id: no2_ppm
+    unit_of_measurement: "ppm"
+    update_interval: 5s
+    lambda: |-
+      float rs = id(ox_raw).state * 1000.0;
+      if (rs > 0 && id(r0_ox) > 0) {
+        float ratio = rs / id(r0_ox);
+        return pow(10.0, log10(ratio) - 0.8129);
+      }
+      return 0.0;
+
+  - platform: template
+    name: "NH3 PPM"
+    id: nh3_ppm
+    unit_of_measurement: "ppm"
+    update_interval: 5s
+    lambda: |-
+      float rs = id(nh3_raw).state * 1000.0;
+      if (rs > 0 && id(r0_nh3) > 0) {
+        float ratio = rs / id(r0_nh3);
+        return pow(10.0, -1.8 * log10(ratio) - 0.163);
+      }
+      return 0.0;
+
+  - platform: template
+    name: "PM1 AQI"
+    id: pm1_aqi
+    lambda: |-
+      float c = id(pm1_sensor).state;
+      if (c <= 0) return 0;
+      if (c <= 12) return (50 / 12) * c;
+      else if (c <= 35.4) return 50 + (50 / 23.4) * (c - 12);
+      else if (c <= 55.4) return 100 + (50 / 20) * (c - 35.4);
+      else if (c <= 150.4) return 150 + (50 / 95) * (c - 55.4);
+      else if (c <= 250.4) return 200 + (100 / 100) * (c - 150.4);
+      else if (c <= 500.4) return 300 + (200 / 250) * (c - 250.4);
+      else return 500;
+    unit_of_measurement: ""
+    update_interval: 60s
+    accuracy_decimals: 0
+
+  - platform: template
+    name: "PM2.5 AQI"
+    id: pm25_aqi
+    lambda: |-
+      float c = id(pm25_sensor).state;
+      if (c <= 0) return 0;
+      if (c <= 12) return (50 / 12) * c;
+      else if (c <= 35.4) return 50 + (50 / 23.4) * (c - 12);
+      else if (c <= 55.4) return 100 + (50 / 20) * (c - 35.4);
+      else if (c <= 150.4) return 150 + (50 / 95) * (c - 55.4);
+      else if (c <= 250.4) return 200 + (100 / 100) * (c - 150.4);
+      else if (c <= 500.4) return 300 + (200 / 250) * (c - 250.4);
+      else return 500;
+    unit_of_measurement: ""
+    update_interval: 60s
+    accuracy_decimals: 0
+
+  - platform: template
+    name: "PM10 AQI"
+    id: pm10_aqi
+    lambda: |-
+      float c = id(pm10_sensor).state;
+      if (c <= 0) return 0;
+      if (c <= 54) return (50 / 54) * c;
+      else if (c <= 154) return 50 + (50 / 100) * (c - 54);
+      else if (c <= 254) return 100 + (50 / 100) * (c - 154);
+      else if (c <= 354) return 150 + (50 / 100) * (c - 254);
+      else if (c <= 424) return 200 + (100 / 70) * (c - 354);
+      else if (c <= 604) return 300 + (200 / 180) * (c - 424);
+      else return 500;
+    unit_of_measurement: ""
+    update_interval: 60s
+    accuracy_decimals: 0    
+
+output: #used with monochromatic mode
+  - platform: ledc
+    pin: GPIO15
+    id: backlight_output
+    frequency: 1000Hz  #1000Hz
+#output:
+#  - platform: gpio
+#    pin: GPIO15
+#    id: backlight_output
+#    inverted: false  # Kept as false to match your working on/off    
+
+switch:
+  - platform: gpio
+    pin: GPIO13  # Wire to Enviro+ Pin 18
+    name: "Gas Heater Enable"
+    id: gas_heater_switch
+    inverted: false  # High to enable
+    restore_mode: ALWAYS_ON  # Default on for normal use
+    icon: "mdi:fire"  # Optional HA icon
+
+
+# Software-based switches for PMS control
+  - platform: gpio
+    pin: GPIO26  # PMS Reset (Enviro+ Pin 13)
+    name: "PMS Reset"
+    id: pms_reset_switch
+    inverted: true  # Active-low (pull low to reset)
+    icon: "mdi:restart"  # Optional HA icon
+    on_turn_on:
+      then:
+        - delay: 100ms  # Short pulse for reset
+        - switch.turn_off: pms_reset_switch  # Auto-off to end pulse
+
+  - platform: gpio
+    pin: GPIO27  # PMS Enable/Set (Enviro+ Pin 15)
+    name: "PMS Enable"
+    id: pms_enable_switch
+    inverted: false  # High for active mode, low for passive
+    icon: "mdi:power"  # Optional HA icon
+    restore_mode: ALWAYS_ON  # Default to active mode on boot
+
+light:
+  - platform: monochromatic
+    output: backlight_output
+    name: "Display Backlight"
+    id: backlight
+    default_transition_length: 0.5s
+#    restore_mode: MEMORY    # ← remembers last brightness after reboot/power loss
+    # Optional: expose a very low minimum brightness (good for night)
+#      min_brightness: 10%   # or 5–15% depending on your display
+    on_turn_on:
+      - globals.set:
+          id: cycling_active
+          value: !lambda 'return true;'
+      - globals.set:
+          id: current_mode
+          value: '0'
+      - script.execute: display_cycle_script  # Start cycling when backlight activates    
+    on_turn_off:
+      - globals.set:
+          id: cycling_active
+          value: !lambda 'return false;'
+#light:
+#  - platform: binary
+#    output: backlight_output
+#    name: "Display Backlight"
+#    id: backlight
+#    on_turn_on:
+#      - globals.set:
+#          id: cycling_active
+#//          value: !lambda 'return true;'
+#      - globals.set:
+#          id: current_mode
+#          value: '0'
+#    on_turn_off:
+#      - globals.set:
+#          id: cycling_active
+#          value: !lambda 'return false;'
+#    default_transition_length: 0.5s    
+#    restore_mode: ALWAYS_ON
+
+#// Optional: Add bar graph logic here using it.rectangle() for visual trends
+#// Note: To display calibrated ppm, add more modes or sub-text (e.g., it.printf(0, 20, id(user_font), Color::BLACK, "CO: %.1f ppm", id(co_ppm).state);)
+
+display:
+  - platform: ili9xxx
+    model: st7735
+    cs_pin: GPIO5
+    dc_pin: GPIO4
+    rotation: 270
+    invert_colors: false
+    color_order: RGB
+    dimensions:
+      width: 80
+      height: 160
+      offset_width: 26
+      offset_height: 1
+    update_interval: 1s
+    lambda: |-
+      it.fill(Color::WHITE);
+
+      // Declare ALL variables at top (outside switch) - this prevents ALL jump errors
+      std::string label = "";
+      float value = 0.0;
+      std::string unit = "";
+      Color text_color = Color::BLACK;
+      Color accent_color = Color(100, 100, 100);  // default gray
+      int bar_width = 0;
+      int hum_bar_width = 0;
+      float raw_hum = 0.0;
+      float hum_percent = 0.0;
+
+      int mode = id(current_mode);
+
+      switch (mode) {
+        case 0: // Temperature
+          label = "Temperature";
+          value = id(temp_sensor).state;
+          unit = "°F";
+
+          if (value < 64) accent_color = Color(0, 120, 255);
+          else if (value < 75) accent_color = Color(0, 180, 80);
+          else accent_color = Color(220, 40, 0);
+          text_color = accent_color;
+
+          it.printf(0, 27, id(user_font), text_color, TextAlign::TOP_LEFT, "%.1f", value);
+          it.printf(40, 27, id(user_font), Color(80, 80, 80), TextAlign::TOP_LEFT, "%s", unit.c_str());
+          it.printf(0, 0, id(user_font), Color(100, 100, 100), TextAlign::TOP_LEFT, "%s", label.c_str());
+          it.printf(65, 27, id(user_font), accent_color, "\uf2c7");  // Thermometer icon
+
+          bar_width = ((value + 10) / 115.0) * 125;
+          if (bar_width < 0) bar_width = 0;
+          if (bar_width > 125) bar_width = 125;
+          it.rectangle(0, 58, bar_width, 20, accent_color);
+          it.rectangle(bar_width, 58, 125 - bar_width, 20, Color(220, 220, 220));
+           // Solid fill + black outline
+           //it.rectangle(0, 58, bar_width, 20, accent_color);
+           // it.rectangle(-1, 57, bar_width + 2, 22, Color::BLACK);  // 1px border
+
+          break;
+
+        case 1: // Humidity
+          label = "Humidity";
+          raw_hum = id(hum_sensor).state;          // Raw 0–1
+          hum_percent = raw_hum;           // Convert once → 0–100
+          value = hum_percent;
+          unit = "%";
+
+           // Debug (temporary - comment out later)
+            // it.printf(0, 100, id(user_font), Color(255, 0, 0), "Raw: %.4f %%: %.1f", raw_hum, hum_percent);
+
+          if (hum_percent < 40) accent_color = Color(255, 160, 0);
+          else if (hum_percent <= 60) accent_color = Color(60, 180, 80);
+          else accent_color = Color(140, 0, 200);
+          text_color = accent_color;
+
+          it.printf(0, 27, id(user_font), text_color, TextAlign::TOP_LEFT, "%.1f", value);
+          it.printf(45, 27, id(user_font), Color(80, 80, 80), TextAlign::TOP_LEFT, "%s", unit.c_str());
+          it.printf(0, 0, id(user_font), Color(100, 100, 100), TextAlign::TOP_LEFT, "%s", label.c_str());
+          it.printf(65, 27, id(user_font), accent_color, "\uf2c9"); // # Humidityicon
+
+          hum_bar_width = hum_percent * 1.25;  // 100 → 125 px
+          if (hum_bar_width < 0) hum_bar_width = 0;
+          if (hum_bar_width > 125) hum_bar_width = 125;
+          it.rectangle(0, 58, hum_bar_width, 20, accent_color);
+          it.rectangle(hum_bar_width, 58, 125 - hum_bar_width, 20, Color(220, 220, 220));
+           // Solid fill + black outline
+           //it.rectangle(0, 58, bar_width, 20, accent_color);
+           //it.rectangle(-1, 57, bar_width + 2, 22, Color::BLACK);  // 1px border
+          break;
+
+        case 2: // Pressure
+          it.printf(0, 0, id(user_font), Color::BLACK, "Pres: %.1f hPa", id(press_sensor).state);
+          break;
+
+          // All other modes now handled directly in switch with simple text
+        case 3:
+          it.printf(0, 0, id(user_font), Color::BLACK, "Ligh: %.1f Lux", id(light_sensor).state);
+          break;
+        case 4:
+          it.printf(0, 0, id(user_font), Color::BLACK, "Oxi : %.1f kΩ", id(ox_raw).state);
+          break;
+        case 5:
+          it.printf(0, 0, id(user_font), Color::BLACK, "Redu: %.1f kΩ", id(red_raw).state);
+          break;
+        case 6:
+          it.printf(0, 0, id(user_font), Color::BLACK, "NH3 : %.1f kΩ", id(nh3_raw).state);
+          break;
+        case 7:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM1 : %.1f µg/m³", id(pm1_sensor).state);
+          break;
+        case 8:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM25: %.1f µg/m³", id(pm25_sensor).state);
+          break;
+        case 9:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM10: %.1f µg/m³", id(pm10_sensor).state);
+          break;
+        case 10:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM1 AQI: %.0f", id(pm1_aqi).state);
+          break;
+        case 11:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM25 AQI: %.0f", id(pm25_aqi).state);
+          break;
+        case 12:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM10 AQI: %.0f", id(pm10_aqi).state);
+          break;
+        case 13:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM0.3 #: %.0f #/0.1L", id(pm0_3_sensor).state);
+          break;
+        case 14:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM0.5 #: %.0f #/0.1L", id(pm0_5_sensor).state);
+          break;
+        case 15:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM1.0 #: %.0f #/0.1L", id(pm1_0_sensor).state);
+          break;
+        case 16:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM2.5 #: %.0f #/0.1L", id(pm2_5_sensor).state);
+          break;
+        case 17:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM5.0 #: %.0f #/0.1L", id(pm5_0_sensor).state);
+          break;
+        case 18:
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM10 #: %.0f #/0.1L", id(pm10_0_sensor).state);
+          break;
+      }
+
+      ESP_LOGD("main", "Prox: %.0f", id(prox_sensor).state);
+
+
+# Note: LSM303D (accelerometer/magnetometer) is not natively supported in ESPHome. Consider using a custom component or external library for integration.
+script:
+  - id: display_cycle_script
+    then:
+      - if:
+          condition:
+            lambda: 'return id(cycling_active);'
+          then:
+            - globals.set:
+                id: current_mode
+                value: !lambda 'return (id(current_mode) + 1) % 19;'
+            - globals.set:
+                id: cycle_count_current
+                value: !lambda 'return id(cycle_count_current) + (id(current_mode) == 0 ? 1 : 0);'
+            - if:
+                condition:
+                  lambda: 'return id(cycle_count_current) >= id(cycle_count_target);'
+                then:
+                  - globals.set:
+                      id: cycling_active
+                      value: !lambda 'return false;'
+                  - globals.set:
+                      id: cycle_count_current
+                      value: '0'
+                  - if:
+                      condition:
+                        lambda: 'return id(prox_sensor).state == 0;'
+                      then:
+                        - light.turn_off: backlight
+            - delay: !lambda 'return id(mode_interval_seconds) * 1000;'
+            - script.execute: display_cycle_script  # Recurse to run the next cycle
+
+
+
+
+packages:
+#  - !include iaq-project/packages/bmp280_espnow_pressure_publish.yaml # espnow broadcast pressure sensor
+#  - !include iaq-project/packages/bmp280_espnow_weathertrend_publish.yaml # espnow broadcast calc'd weather trend
+  - !include iaq-project/common/espnow.yaml # shared sensor broadcast
+#  - !include iaq-project/packages/aht20bmp280.yaml #AHT20-BMP280 t/h/pres
+#  - !include iaq-project/packages/aht20.yaml # temp/hum sensor
+##   - !include iaq-project/packages/BME680_688.yaml # temp/hum/pres/ sensor
+#  - !include iaq-project/packages/sgp30.yaml # eCO2, TVOC, 
+#  - !include iaq-project/packages/MH-Z19.yaml #mh-z19 CO2 Sensor
+#  - !include iaq-project/packages/SSD1306-64x48.yaml  # display2
+#  - !include iaq-project/packages/SSD1306-128x64-local.yaml  # display1 local with bmp280 sensor
+#  - !include iaq-project/packages/SSD1306-128x64-local-w-countdown.yaml  # with countdown to sleep. display1/2, local (with bmp280 sensor) or remote    
+#  - !include iaq-project/packages/display-fonts.yaml  # arial
+#  - !include iaq-project/packages/max17048.yaml #max17048 Fuel Guage
+#  - !include iaq-project/packages/PMSX003.yaml #PMSX003, 7003
+#  - !include iaq-project/boards/Board-esp32dev-Arduino.yaml #Board specific GPIO, etc.
+#  - !include iaq-project/common/base.yaml  # Hardware, logger, wifi, api, ota, etc.
+#  - !include iaq-project/common/sensors.yaml  # All sensors and text_sensors
+#  - !include iaq-project/common/sleep.yaml  # Deep sleep, globals, intervals
+  - !include iaq-project/common/diagnostics.yaml # resets, reasons
+#  - !include iaq-project/common/esphome_includes.yaml # componnts

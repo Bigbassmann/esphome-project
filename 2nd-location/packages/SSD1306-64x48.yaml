@@ -1,0 +1,50 @@
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 64x32"  # Swap to "SSD1306 128x64" 32 or 48 ?for the larger one
+    address: 0x3C
+    brightness: 100%
+    rotation: 0  # Try 90, 180, or 0 if upside down/mirrored
+    id: display2
+    update_interval: 1s  # For testing
+    lambda: |-
+      // it.command(0xD3);  // Display offset command
+      // it.command(0x00);  // Offset value (try 0x08, 0x10, or 0x18 to shift buffer down and reveal top)
+      it.clear();
+
+      int center_x = it.get_width() / 2;
+      int center_y = it.get_height() / 2;
+      int y_offset = 0;  // Negative to shift UP (reveal top); adjust -5 to -12
+
+      // Filled border test (1px line might be weak; try filled for visibility)
+      // it.filled_rectangle(0, 0 + y_offset, it.get_width(), it.get_height(), COLOR_ON);
+      // it.filled_rectangle(1, 1 + y_offset, it.get_width() - 2, it.get_height() - 2, COLOR_OFF);  // Inner clear for hollow border
+
+      // Minimal 1px border (less "large"; comment out if unwanted)
+      it.line(0, 0, it.get_width() - 1, 0, COLOR_ON);  // Top
+      it.line(0, 0, 0, it.get_height() - 1, COLOR_ON);  // Left
+      it.line(it.get_width() - 1, 0, it.get_width() - 1, it.get_height() - 1, COLOR_ON);  // Right
+      it.line(0, it.get_height() - 1, it.get_width() - 1, it.get_height() - 1, COLOR_ON);  // Bottom
+
+      // Text with offset (tighter spacing to fit)
+      // it.print(center_x, 2 + y_offset, id(arial8), TextAlign::TOP_CENTER, "Test");  // Top text, small
+      // it.print(center_x, 12 + y_offset, id(arial12), TextAlign::TOP_CENTER, "Mid");  // Medium, raised
+      // it.print(center_x, 30 + y_offset, id(arial8), TextAlign::TOP_CENTER, "Small");  // Bottom, raised
+
+      // Tighter text (smaller sizes, closer spacing to fit 48px)
+      it.print(center_x, 0, id(arial10), TextAlign::TOP_CENTER, "Display Test");  // Top, size 10
+      it.print(center_x, 10, id(arial12), TextAlign::TOP_CENTER, "Mid");  // Medium, size 15
+      // it.print(center_x, 21, id(arial8), TextAlign::TOP_CENTER, "Small Text");  // Bottom, size 10
+
+      // Graphics with offset
+      // it.line(0, 0 + y_offset, it.get_width(), it.get_height() + y_offset, COLOR_ON);
+      // it.circle(center_x, center_y + y_offset, 6, COLOR_ON);  // Smaller radius
+
+      // Smaller graphics
+      // it.line(0, 0, it.get_width(), it.get_height(), COLOR_ON);  // Diagonal
+      //it.circle(center_x, center_y, 6, COLOR_ON);  // Radius 6px
+
+      // Uptime with offset
+      char buf[16];
+      sprintf(buf, "Uptime: %.0fs", id(esp_uptime).state);
+      it.print(center_x, 21 + y_offset, id(arial8), TextAlign::TOP_CENTER, buf);
+

@@ -1,0 +1,50 @@
+globals:
+  - id: remote_weather_global
+    type: std::string
+    restore_value: yes
+    initial_value: '"Calibrating..."'
+  - id: prev_pressure  # Store previous pressure
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: pressure_delta  # Store delta for trends
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+
+text_sensor:
+  - platform: template
+    name: "AQ Weather Trend Local"
+    id: weather_trend
+#    internal: true
+    update_interval: 60s
+    icon: "mdi:weather-partly-cloudy" # Static icon
+    lambda: |-
+      float current_pressure = id(bmp_pressure).state;
+      if (current_pressure == NAN || id(prev_pressure) == 0.0) {
+        id(prev_pressure) = current_pressure;
+        id(pressure_delta) = 0.0;
+        ESP_LOGD("weather", "Calibrating... Current: %.2f Prev: %.2f", current_pressure, id(prev_pressure));
+        return esphome::optional<std::string>("Calibrating...");
+      }
+      id(pressure_delta) = (current_pressure - id(prev_pressure)) / (1.0 / 60.0);
+      id(prev_pressure) = current_pressure;
+      std::string trend;
+      if (id(pressure_delta) > 0.5) {
+        trend = "Rising-Weather Improving";
+      } else if (id(pressure_delta) < -0.5) {
+        trend = "Falling-Weather Worsening";
+      } else {
+        trend = "Stable-Steady Conditions";
+      }
+      ESP_LOGD("weather", "Trend calculated: %s | Current: %.2f Prev: %.2f Delta: %.2f", trend.c_str(), current_pressure, id(prev_pressure), id(pressure_delta));
+      return esphome::optional<std::string>(trend);
+    on_value:
+      then:
+        - lambda: 'id(remote_weather_global) = x;'
+        - espnow.send:
+            address: "94:A9:90:6D:22:70"
+            data: !lambda |-
+              std::string payload = "W:" + x;
+              ESP_LOGD("espnow", "Sending weather trend: %s to receiver", payload.c_str());
+              return std::vector<uint8_t>(payload.begin(), payload.end());

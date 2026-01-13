@@ -1,0 +1,86 @@
+# max17048.yaml - Reusable package for MAX17048 fuel gauge in ESPHome (ESP-IDF framework)
+
+#external_components:
+#  - source: github://Option-Zero/esphome-components@max17048
+#    components: [max17048]
+#external_components:
+#  - source:
+#      type: local
+#      path: custom_components/max17048_sensor
+
+sensor:
+  - platform: max17043 # I2C bus ID - address 0x36 could be 0x38
+    address: 0x36
+    battery_voltage:
+      id: battery_voltage
+      name: "Battery Voltage"
+    battery_level:
+      name: "Battery SOC"
+      id: battery_soc
+#    entity_category: 
+#    rate:
+#      name: "Battery Charge Rate"
+
+  - platform: template
+    name: "Battery RoC (60m Avg)"
+    id: battery_voltage_rate
+    unit_of_measurement: "V/m"
+    accuracy_decimals: 4
+    entity_category: diagnostic
+    update_interval: 30s  # Adjust based on monitoring needs; shorter for finer resolution
+    lambda: |-
+      float current_voltage = id(battery_voltage).state;  // Assuming 'battery_voltage' is the ID of your MAX17048 voltage sensor
+      float current_time = id(esp_uptime).state;  // Uses existing uptime sensor for time delta
+      if (isnan(id(prev_voltage)) || isnan(id(prev_time))) {
+        id(prev_voltage) = current_voltage;
+        id(prev_time) = current_time;
+        return NAN;
+      }
+      float delta_v = current_voltage - id(prev_voltage);
+      float delta_t = current_time - id(prev_time);
+      if (delta_t <= 0) {
+        return NAN;  // Avoid division by zero or negative time
+      }
+      float rate = delta_v / delta_t * 60;  // Rate in V/s; multiply by 3600 for V/hour if preferred
+      id(prev_voltage) = current_voltage;
+      id(prev_time) = current_time;
+      return rate;
+    filters:
+      - sliding_window_moving_average:
+          window_size: 120  # Number of samples to average over (e.g., last 10 minutes if update_interval=60s | 20@30s=10m, 120@30s=60m ave)
+          send_every: 1    # Publish the smoothed value every update
+          send_first_at: 1 # Start publishing after the first value
+
+button:
+  - platform: template
+    name: "Battery MAX17043 Reset"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          // Write 0x4000 to MODE register (0x06) for quick-start
+          uint8_t buf[3] = {0x06, 0x40, 0x00};  // Register + data (0x4000 big-endian)
+          auto err = id(bus_a).write(0x36, buf, 3);
+          if (err == esphome::i2c::ERROR_OK) {
+            ESP_LOGI("max17048", "Quick-start reset successful.");
+          } else {
+            ESP_LOGW("max17048", "Quick-start reset failed (I2C error: %d).", static_cast<int>(err));
+          }
+
+#max17048_sensor:
+#  i2c_id: bus_a  # I2C bus ID - address 0x36
+#  voltage:
+#    name: "Battery Voltage"
+#  soc:
+#    name: "Battery SOC"
+#  rate:
+#    name: "Battery Charge Rate"
+
+globals:
+  - id: prev_voltage
+    type: float
+    restore_value: no
+    initial_value: 'NAN'
+  - id: prev_time
+    type: float
+    restore_value: no
+    initial_value: 'NAN'

@@ -1,0 +1,61 @@
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64" # Swap to "SSD1306 128x64" for the larger one
+    address: 0x3D
+    brightness: 100%
+    rotation: 0 # Try 90, 180, or 0 if upside down/mirrored
+    id: display1
+    update_interval: 1s # For testing
+    lambda: |-
+      static unsigned long last_switch = 0;
+      static int screen = 0;
+      unsigned long now = millis();
+      if (now - last_switch > 10000) { // Switch every 10 seconds; adjust as needed
+        screen = (screen + 1) % 3;
+        last_switch = now;
+      }
+     
+      it.clear();
+      int center_x = it.get_width() / 2;
+      int center_y = it.get_height() / 2;
+     
+      if (screen == 0) {
+        // Screen 1: Original test display
+        // Border (full screen)
+        it.rectangle(0, 0, it.get_width(), it.get_height(), COLOR_ON);
+        // Centered text tests (auto-scales positions)
+        it.print(center_x, 2, id(arial15), TextAlign::TOP_CENTER, "Display Test");
+        it.print(center_x, center_y - 15, id(arial30), TextAlign::TOP_CENTER, "BIG");
+        // Optional dynamic uptime (uncomment if esp_uptime sensor exists)
+        char buf[32];
+        sprintf(buf, "Uptime: %.0fs", id(esp_uptime).state);
+        it.print(center_x, center_y + 15, id(arial10), TextAlign::TOP_CENTER, buf);
+      } else if (screen == 1) {
+        // Screen 2: Battery info from sensors
+        // Border (full screen)
+        it.rectangle(0, 0, it.get_width(), it.get_height(), COLOR_ON);
+        // Header
+        it.print(center_x, 2, id(arial15), TextAlign::TOP_CENTER, "Battery Status");
+        // Voltage and SOC
+        char buf[32];
+        sprintf(buf, "Voltage: %.2fV", id(battery_voltage).state);
+        it.print(center_x, center_y - 10, id(arial15), TextAlign::TOP_CENTER, buf);
+        sprintf(buf, "SOC: %.0f%%", id(battery_soc).state);
+        it.print(center_x, center_y + 10, id(arial15), TextAlign::TOP_CENTER, buf);
+      } else {
+        // Screen 3: Temp, Hum, Pres, and Weather Trend
+        // Border (full screen)
+        it.rectangle(0, 0, it.get_width(), it.get_height(), COLOR_ON);
+        // Header
+        it.print(center_x, 2, id(arial12), TextAlign::TOP_CENTER, "Environment");
+        // Temp (using AHT20 for accuracy), Hum, Pres
+        char buf[64]; // Larger buffer for longer lines
+        sprintf(buf, "Temp: %.1f°F", id(aht20_temp).state);
+        it.print(center_x, center_y - 18, id(arial10), TextAlign::TOP_CENTER, buf);
+        sprintf(buf, "Humidity: %.1f%%", id(aht20_humidity).state);
+        it.print(center_x, center_y - 5, id(arial10), TextAlign::TOP_CENTER, buf);
+        sprintf(buf, "Pressure: %.2f hPa", id(bmp_pressure).state);
+        it.print(center_x, center_y + 8, id(arial10), TextAlign::TOP_CENTER, buf);
+        // Weather Trend (string from text_sensor)
+        it.print(center_x, center_y + 20, id(arial10), TextAlign::TOP_CENTER, id(weather_trend).state.c_str());
+      }

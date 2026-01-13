@@ -1,0 +1,44 @@
+espnow:
+  on_receive:
+    then:
+      - lambda: |-
+          std::string received_str(reinterpret_cast<const char *>(data), size);
+          // Trim any trailing nulls or whitespace (optional but safe)
+          received_str.erase(std::find_if(received_str.rbegin(), received_str.rend(), [](unsigned char ch) { return !std::isspace(ch) && ch != '\0'; }).base(), received_str.end());
+          std::string sender_str = format_mac_address_pretty(info.src_addr);
+          
+          ESP_LOGI("espnow", "Raw packet received, size %d: %s", size, received_str.c_str());  // TEMP: Debug log to confirm lambda runs
+          
+          if (received_str.find("P:", 0) == 0) {  // Check prefix
+            std::string num_str = received_str.substr(2);
+            char* end_ptr;
+            float pressure = std::strtof(num_str.c_str(), &end_ptr);  // Non-throwing parse
+            if (end_ptr == num_str.c_str() || *end_ptr != '\0') {  // Check if parse failed (no conversion or trailing junk)
+              ESP_LOGW("espnow", "Failed to parse pressure from %s (invalid format)", received_str.c_str());
+              return;  // Skip update on bad data
+            }
+            id(received_pressure_global) = pressure;
+            id(espnow_pressure_display).update();
+            id(display1).update();  // Update display if present
+            ESP_LOGI("espnow", "Received pressure: %.2f from %s", pressure, sender_str.c_str());
+          }
+
+globals:
+  - id: received_pressure_global
+    type: float
+    restore_value: yes # Optional: Persist across reboots
+#    initial_value: '0.0' # Matches sender's initial state 
+
+sensor:
+  - platform: template
+    name: "AQ Pressure Rec'd"
+    id: espnow_pressure_display
+#    internal: true
+    unit_of_measurement: hPa
+    lambda: |-
+      if (isnan(id(received_pressure_global))) {
+        ESP_LOGW("pressure", "Received NAN pressure, defaulting to 0.0");
+        return 0.0;
+      }
+      return id(received_pressure_global);
+    update_interval: 30s

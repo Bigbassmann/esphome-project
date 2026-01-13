@@ -1,0 +1,84 @@
+#  #AITrip ESP32-C3 FN4 SUPER MINI
+esphome:
+  on_boot:
+    priority: -200  # Executes after base.yaml's -100 priority
+    then:
+      - lambda: |-
+          esp_reset_reason_t reason = esp_reset_reason();
+          if (reason == ESP_RST_DEEPSLEEP) {
+            std::string pin_str = "${wakeup_pin}";
+            int wakeup_pin_num;
+            if (pin_str.rfind("GPIO", 0) == 0) {  // Check if starts with "GPIO"
+              wakeup_pin_num = atoi(pin_str.c_str() + 4);  // Skip "GPIO" and parse number
+            } else {
+              wakeup_pin_num = atoi(pin_str.c_str());  // Plain number
+            }
+            gpio_num_t pin = static_cast<gpio_num_t>(wakeup_pin_num);
+            ESP_LOGI("wakeup", "[BOOT] GPIO%d state at wakeup: %d", wakeup_pin_num, gpio_get_level(pin));
+          }
+      - delay: 30s  # Wait for PMS7003 warmup before sending active mode command
+      - uart.write:
+          id: pms  # Your pms_uart_id from the UART config
+          data: [0x42, 0x4D, 0xE1, 0x00, 0x01, 0x01, 0x71]    
+
+substitutions:
+  wakeup_pin: GPIO1  #ADC1_CH1 (safe ADC)/deep sleep wake (low trigger), ADC1_CH1 for analog. Safe for boot (no strapping issue). Good choice for wake.
+  wakeup_pin_mode: INVERT_WAKEUP # KEEP_AWAKE, IGNORE, INVERT_WAKEUP
+  usb_detect_pin: GPIO7 #SS/digital I/O, often CS/SS for SPI. Safe for input to detect USB power (e.g., high on VBUS).
+  stay_awake_pin: GPIO2 #A2/ADC1_CH2, digital I/O. Safe, no boot conflicts
+#  # battery_adc_pin: GPIO4 #ADC1_CH4 (safe ADC)/SCK/A4/ADC1_CH4, digital I/O, SCK for SPI. Excellent for battery voltage (analog read).
+  i2c_sda_pin: GPIO8 #I2C SDA /digital I/O. Strapping pin—pull-up on boot ok for I2C.
+  i2c_scl_pin: GPIO9 #I2C SCL /digital I/O. Strapping pin—similar to GPIO8.
+  status_led: GPIO10 #OK (status LED, PWM, etc.)/digital I/O, PWM-capable. Often used for LED on C3 minis (external if no built-in). Safe.
+  safe_boot_pin: GPIO0 #OK (input/output)/digital I/O, strapping (boot button). Safe for input/output after boot.
+#  # pwm_output: GPIO3 #ADC1_CH3 (safe ADC)/A3/ADC1_CH3, PWM-capable. Good for output/analog.
+  pms_rx_pin: GPIO20 # was 21 RX/UART0_RX default. Fixed for serial.
+  pms_tx_pin: GPIO21 #was 20 TX/UART0_TX default. Fixed for serial.
+  miso_pin: GPIO5 #A5/MISO/ADC1_CH5, MISO for SPI.
+  mosi_pin: GPIO6 #MOSI/digital I/O, MOSI for SPI.
+#  #voltage divider on battery_adc_pin (to handle LiPo 4.2V). If using external LED on status_led, add resistor. For USB detect, wire to VBUS (5V) with divider to 3.3V.
+  pms_baud_rate: 9600
+#  # UART for MH (e.g., MH-Z19) Test for stability, as UART1 on C3 has some limitations (e.g., no hardware flow control). If logs show issues (e.g., no data), swap RX/TX wiring or try lower baud rates initially.
+  mh_uart_id: mh
+  mh_rx_pin: GPIO4  # or 10 / 5 - safe for RX, PWM-capable but no default conflicts
+  mh_tx_pin: GPIO3  # or 1 safe for TX, also ADC1_CH1 but fine for UART
+  mh_baud_rate: 9600
+#  # PMSX003 sensor settings
+  pms_update_interval: 30s
+  pms_pm10_name: "Air Quality-PM 10.0"
+  pms_pm2_5_name: "Air Quality-PM 2.5"
+  pms_pm1_name: "Air Quality-PM 1.0"
+  pms_uart_id: pms  #uart_id: uart_bus1
+  esp32_board: esp32-c3-devkitm-1
+  esp_framework_type: esp-idf
+
+esp32:
+  board: ${esp32_board}
+  framework:
+    type: ${esp_framework_type}
+
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+  id: bus_a
+
+uart:
+  - id: ${pms_uart_id}
+    rx_pin: ${pms_rx_pin}
+    tx_pin: ${pms_tx_pin}
+    baud_rate: ${pms_baud_rate}
+    rx_buffer_size: 512 # test
+#    debug:   # only debug for minimal https://esphome.io/components/uart/#debugging
+#      direction: BOTH
+#      dummy_receiver: false
+#      after:
+#        delimiter: "\n"
+#      sequence:
+#        - lambda: UARTDebug::log_string(direction, bytes);    
+    
+  - id: ${mh_uart_id}
+    rx_pin: ${mh_rx_pin}
+    tx_pin: ${mh_tx_pin}
+    baud_rate: ${mh_baud_rate}
+    rx_buffer_size: 512 # test 

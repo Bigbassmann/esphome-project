@@ -1,0 +1,152 @@
+text_sensor:
+  - platform: template
+    name: "Sleep-Wakeup Cause"  # Entity name in HA
+    id: wakeup_cause_text
+    entity_category: diagnostic
+    lambda: return esphome::optional<std::string>("");  # Empty default as optional string
+    update_interval: never  # Only publish on events, not periodically
+
+  - platform: template
+    name: "WiFi Power Save Mode"
+    id: wifi_power_save_mode_text
+    entity_category: diagnostic
+    lambda: |-
+      wifi_ps_type_t ps;
+      esp_wifi_get_ps(&ps);
+      switch (ps) {
+        case WIFI_PS_NONE: return {"NONE"};
+        case WIFI_PS_MIN_MODEM: return {"LIGHT"};
+        case WIFI_PS_MAX_MODEM: return {"MODEM"};
+        default: return {"UNKNOWN"};
+      }
+    update_interval: 60s
+
+  - platform: template
+    name: "ESP Reset Reason"
+    id: esp_reset_reason_text
+    entity_category: diagnostic
+    lambda: |-
+      switch (esp_reset_reason()) {
+        case ESP_RST_UNKNOWN:     return {"Unknown"};
+        case ESP_RST_POWERON:     return {"Power On"};
+        case ESP_RST_EXT:         return {"External Reset"};
+        case ESP_RST_SW:          return {"Software Reset"};
+        case ESP_RST_PANIC:       return {"Panic"};
+        case ESP_RST_INT_WDT:     return {"Interrupt WDT"};
+        case ESP_RST_TASK_WDT:    return {"Task WDT"};
+        case ESP_RST_WDT:         return {"Other WDT"};
+        case ESP_RST_DEEPSLEEP:   return {"Deep Sleep Wake"};
+        case ESP_RST_BROWNOUT:    return {"Brownout"};
+        case ESP_RST_SDIO:        return {"SDIO"};
+        case ESP_RST_USB:         return {"USB"};
+        case ESP_RST_JTAG:        return {"JTAG"};
+        case ESP_RST_EFUSE:       return {"Efuse"};
+        case ESP_RST_PWR_GLITCH:  return {"Power Glitch"};
+        case ESP_RST_CPU_LOCKUP:  return {"CPU Lockup"};
+        default:                  return {"Unknown"};
+      }
+    update_interval: never
+    
+select:    
+  - platform: template
+    name: "Logger Level"
+    id: logger_level_select
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "NONE"
+      - "ERROR"
+      - "WARN"
+      - "INFO"
+      - "DEBUG"
+      - "VERBOSE"
+      - "VERY_VERBOSE"
+    initial_option: "VERBOSE"  # Default
+    on_value:
+      - lambda: |-
+          std::string opt = x;
+          int level = ESPHOME_LOG_LEVEL_VERBOSE;  // Default
+          if (opt == "NONE") level = ESPHOME_LOG_LEVEL_NONE;
+          else if (opt == "ERROR") level = ESPHOME_LOG_LEVEL_ERROR;
+          else if (opt == "WARN") level = ESPHOME_LOG_LEVEL_WARN;
+          else if (opt == "INFO") level = ESPHOME_LOG_LEVEL_INFO;
+          else if (opt == "DEBUG") level = ESPHOME_LOG_LEVEL_DEBUG;
+          else if (opt == "VERBOSE") level = ESPHOME_LOG_LEVEL_VERBOSE;
+          else if (opt == "VERY_VERBOSE") level = ESPHOME_LOG_LEVEL_VERY_VERBOSE;
+          esphome::logger::global_logger->set_log_level(level);
+          ESP_LOGI("config", "[CONFIG] Logger level set to %s", opt.c_str());
+
+  - platform: template  # Changed from wifi_tx_power to template for standard restoration
+    name: "Wi-Fi Power Select"
+    id: wifi_power_level_select
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - "20.0" #Default/max for ESP32; good range but higher power draw.
+      - "19.5" #High power; common for strong signals.
+      - "19.0" #Slightly reduced; balances range and efficiency.
+      - "18.5" #Moderate; useful for indoor setups.
+      - "18.0"
+      - "17.5"
+      - "17.0" #Lower power; reduces interference.
+      - "16.5"
+      - "16.0"
+      - "15.5"
+      - "15.0" #Even lower; for battery optimization.
+      - "14.5"
+      - "14.0"
+      - "13.5"
+      - "13.0" #Reduced range; energy-efficient.
+      - "12.5"
+      - "12.0"
+      - "11.5"
+      - "11.0" #Minimal range; very low power.
+      - "10.5"
+      - "10.0"
+      - "9.5"
+      - "9.0"
+      - "8.5" #Minimum practical; shortest range, lowest consumption.
+    initial_option: "20.0"  # Default if no restoration
+    on_value:
+      - lambda: |-
+          char *endptr;
+          float power_dbm = strtof(x.c_str(), &endptr);  //# Changed: Safe parse (no exceptions)
+          if (endptr != x.c_str() && *endptr == '\0') {  //# Validity check
+            int8_t power_quarter = static_cast<int8_t>(power_dbm * 4);
+            esp_wifi_set_max_tx_power(power_quarter);
+            id(wifi_output_power_sensor).publish_state(power_dbm);
+          } else {
+            ESP_LOGW("config", "[CONFIG] Invalid WiFi power selection: %s", x.c_str());
+          }
+               
+sensor:
+  - platform: template
+#    name: "ESP Reset Reason (Raw)"
+    id: esp_reset_reason_raw
+    entity_category: diagnostic
+    internal: true
+    accuracy_decimals: 0
+    lambda: |-
+      return (float)esp_reset_reason();
+
+  - platform: template
+    name: "Wi-Fi Power Level"
+    id: wifi_output_power_sensor
+    entity_category: diagnostic
+    unit_of_measurement: "dBm"
+    accuracy_decimals: 1
+    icon: "mdi:wifi-strength-outline"
+    lambda: |-
+      const char* sel = id(wifi_power_level_select).current_option();  //# Changed: const char*
+      if (sel != nullptr && sel[0] != '\0') {
+        char *endptr;
+        float value = strtof(sel, &endptr);  //# Changed: Safe parse (no try-catch/exceptions)
+        if (endptr != sel && *endptr == '\0') {  //# Validity check
+          return value;
+        }
+      }
+      return NAN;
+    update_interval: 60s
+

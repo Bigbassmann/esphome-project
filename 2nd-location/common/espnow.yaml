@@ -1,0 +1,14 @@
+espnow:
+  auto_add_peer: false  # Critical: Enables broadcast reception in many cases
+  peers:
+#    - "f4:65:0b:48:ef:18"  # d1-mini32-1 227 Meander
+    - "94:a9:90:6d:22:70"  # xiao-esp32c3 004 Cabin/Meander
+    - "48:f6:ee:30:ca:90"  # super mini32-2 100 Cabin/Meander
+# #   - "94:a9:90:6c:83:38"  #xiao32c3-1 180 Meander
+    - "48:e7:29:ad:09:e4"  #esp32-2 151 Cabin
+    - "48:e7:29:b6:ce:14"  #espdolce1 171 Cabin
+  #  - "94:a9:90:6a:c4:88"  # xiao32c3-2 136 Meander
+#   # - "cc:8d:a2:c2:ac:5c"  # super mini32-2 235 Meander
+#  encryption:
+#    key: "espnow12345678"  # Shared across all devices
+

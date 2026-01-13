@@ -1,0 +1,76 @@
+# Local Device sensors. bmp_pressure and calc'd weather_trend
+# If BMP280 pres is local, then display, pres, weather, globals, all pull from local files packages
+#  local packages publish pres and weather via espnow
+# if pres is NOT local, then pres, weather, display are received via receive/espnow packages
+# receiving device main(s) !includes receiving/espnow packages
+# publishing device main(s) !includes publishing/local packages 
+sensor:
+  - platform: bmp280_i2c  #default 0x76
+    address: 0x77 # 0x76 or 0x77
+    update_interval: 60s
+    iir_filter: 2x  # Add this: Low-pass filter (options: OFF, 2x, 4x, 8x, 16x)
+    temperature:
+      name: "AQ Temp - BMP"
+      oversampling: 2x
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+    pressure:
+      name: "AQ Pressure Local"
+      id: bmp_pressure
+      on_value: 
+        then:
+          - lambda: 'id(remote_pressure_global) = x;'
+          - logger.log:
+              level: DEBUG
+              format: "Local pressure updated: %.2f hPa"
+              args: ['x']
+          - espnow.send:
+              address: "94:A9:90:6D:22:70"  # Receiver MAC (from your xiao32-c3-3-004, check logs or WiFi scan)
+              data: !lambda |-
+                std::string payload = "P:" + std::to_string(id(remote_pressure_global));
+                ESP_LOGD("espnow", "Sending pressure: %s to receiver", payload.c_str());
+                return std::vector<uint8_t>(payload.begin(), payload.end());
+
+  - platform: aht10
+    variant: AHT20
+    address: 0x38  #default
+    update_interval: 60s
+    temperature:
+      name: "AQ Temp - AHT"
+      id: aht20_temp
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+    humidity:
+      name: "AQ Humidity - AHT"
+      id: aht20_humidity
+      accuracy_decimals: 1
+      filters:
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+
+  - platform: template
+    name: "Temp for Cal - AHT"  # Optional: For visibility in dashboard
+    id: aht20_temp_c
+    internal: true
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      // Convert Fahrenheit back to Celsius (adjust if AHT20 is already in °C)
+      return (id(aht20_temp).state - 32.0) * (5.0 / 9.0);

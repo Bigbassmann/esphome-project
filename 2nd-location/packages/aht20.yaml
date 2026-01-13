@@ -1,0 +1,34 @@
+# No BMP280 bmp_pressure and calc'd weather_trend locally
+# If pres is NOT local, then pres, weather, display are received via receive/espnow packages
+# receiving device main(s) !includes receiving/espnow packages
+# publishing device main(s) !includes publishing/local packages 
+sensor:
+  - platform: aht10
+    variant: AHT20
+    address: 0x38  #default or 0x36
+    update_interval: 30s
+    temperature:
+      name: "AQ Temp - AHT"
+      id: aht20_temp
+      unit_of_measurement: "°F"
+      accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (isnan(x)) return NAN;
+            return x * (9.0/5.0) + 32.0;
+        - filter_out: 0.0
+        - median:
+            window_size: 3
+            send_every: 3
+            send_first_at: 1
+   
+    humidity:
+      name: "AQ Humidity - AHT"
+      id: aht20_humidity
+      accuracy_decimals: 1
+      filters:
+      - filter_out: 0.0
+      - median:
+          window_size: 3
+          send_every: 3
+          send_first_at: 1
