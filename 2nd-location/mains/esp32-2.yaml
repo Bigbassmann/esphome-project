@@ -14,7 +14,7 @@ substitutions:   # .yaml
 #  manual_ip_static_ip: 192.168.119.151 # 192.168.119.151
 #  manual_ip_gateway: 192.168.119.1
 #  manual_ip_subnet: 255.255.255.0
-  ap_ssid: "Esp32-2 Fallback Hotspot"  #
+  ap_ssid: "Esp32-2 Fallback Hotspot"  # 
   ap_password: "eObcKEh48Q1A"  #
   espnow_id: esp32_2_151  # No hyphens or spaces; valid C++ identifier
 
@@ -139,39 +139,38 @@ font:
 # GPIO32, 33, 34, 35, 36, etc. — adjust if needed
 i2s_audio:
   id: i2s_mic_bus
-  i2s_lrclk_pin: GPIO32     # Word Select / Frame Sync (WS/LRCLK)
-  i2s_bclk_pin: GPIO33      # Bit Clock (BCLK)
+  i2s_lrclk_pin: GPIO14     # Word Select / Frame Sync (WS/LRCLK)
+  i2s_bclk_pin: GPIO25      # Bit Clock (BCLK)
 
 microphone:
   - platform: i2s_audio
     id: env_mic
-    i2s_audio_id: i2s_mic_bus           # Must match your i2s_audio id
-    adc_type: external                  # ← REQUIRED: This fixes the error!
-    i2s_din_pin: GPIO34                 # Data In (DOUT/DIN)
+    i2s_audio_id: i2s_mic_bus           # Must match i2s_audio id
+    adc_type: external
+    i2s_din_pin: GPIO12                 # Data In (DOUT/DIN)
     channel: left                       # SPH0645LM4H outputs on left channel
     sample_rate: 16000                  # adjust as needed 8000
     bits_per_sample: 16bit
     pdm: false
-#    passive: false                      # For standalone monitoring (automatic capture)
-
+    
 globals:
-  # Sound wake feature control
+     # Sound wake feature control
   - id: sound_wake_enabled
     type: bool
     restore_value: yes
     initial_value: 'false'      # off by default
 
-  # Sound wake threshold (dB)
+     # Sound wake threshold (dB)
   - id: sound_wake_threshold_db
     type: float
     restore_value: yes
     initial_value: '65.0'       # ~normal conversation level
-  # ────────────────────────────────────────────────────────────────────────────────
+
   - id: prox_threshold
     type: int
     restore_value: yes
     initial_value: '2'         # default medium sensitivity
-  # ────────────────────────────────────────────────────────────────────────────────
+
   - id: lux_high_threshold
     type: int
     restore_value: yes
@@ -216,7 +215,7 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'  # New global for tracking cycling state
-  # Calibration baselines (R0 in ohms; calibrate in clean air and adjust via HA)
+     # Calibration baselines (R0 in ohms; calibrate in clean air and adjust via HA)
   - id: r0_red
     type: float
     restore_value: yes
@@ -347,7 +346,7 @@ binary_sensor:
     id: proximity_trigger
     device_class: motion
     filters:
-      - delayed_off: 1s          # ← increased a bit to reduce chatter
+      - delayed_off: 350ms     # 1s # ← increased a bit to reduce chatter
     on_press:
       then:
         - lambda: |-
@@ -368,7 +367,7 @@ text_sensor:
     name: "Display Cycle Count"  # Optional: For visibility in dashboard
     id: cycle_count_sensor
     icon: "mdi:progress-clock"
-    update_interval: 5s
+    update_interval: 1s
     lambda: |-
       char buf[32];
       snprintf(buf, sizeof(buf), "%d / %d", id(cycle_count_current) +1 , id(cycle_count_target));
@@ -414,7 +413,7 @@ text_sensor:
 sensor:
      # Relative dB (0 dB = maximum loudness the mic can handle without clipping)
   - platform: sound_level
-    passive: false                  # Required (as we discussed before)
+    passive: false
     microphone: env_mic
     measurement_duration: 1s        # Optional: time window for each measurement (default 1s)
     peak:                           # ← Peak sub-sensor
@@ -500,8 +499,8 @@ sensor:
       id: hum_sensor
 
   - platform: ltr_als_ps
-    type: ALS_PS  # For LTR559 (integrated ALS + PS)
-    address: 0x23  # Default for ALS_PS; explicit for clarity
+    type: ALS_PS                  # For LTR559 (integrated ALS + PS)
+    address: 0x23                 # Default for ALS_PS; explicit for clarity
     update_interval: 1s
     ambient_light:
       name: "Env Light"
@@ -520,10 +519,10 @@ sensor:
               id(last_switch) = now;
             }
             ESP_LOGD("main", "Prox: %.0f", id(prox_sensor).state);
-        - light.turn_on: backlight  # Added: Turn on backlight on proximity trigger    
+        - light.turn_on: backlight       # Added: Turn on backlight on proximity trigger    
 
   - platform: pmsx003
-    type: PMSX003  #PMSX003  #PMS5003ST
+    type: PMSX003                  #PMSX003  #PMS5003ST
     uart_id: uart_pms
     update_interval: 60s
   #    reset_pin: GPIO26  # Added for hardware reset
@@ -689,11 +688,11 @@ sensor:
     update_interval: 60s
     accuracy_decimals: 0    
 
-output: #used with monochromatic mode
+output:            # used with monochromatic mode
   - platform: ledc
     pin: GPIO15
     id: backlight_output
-    frequency: 1000Hz  #1000Hz
+    frequency: 1000Hz      #1000Hz
   
   #output:
   #  - platform: gpio
@@ -719,33 +718,33 @@ switch:
           value: !lambda 'return false;'
 
   - platform: gpio
-    pin: GPIO13  # Wire to Enviro+ Pin 18
+    pin: GPIO13                 # Wire to Enviro+ Pin 18
     name: "Gas Heater Enable"
     id: gas_heater_switch
-    inverted: false  # High to enable
-    restore_mode: ALWAYS_ON  # Default on for normal use
-    icon: "mdi:fire"  # Optional HA icon
+    inverted: false               # High to enable
+    restore_mode: ALWAYS_ON       # Default on for normal use
+    icon: "mdi:fire"              # Optional HA icon
 
 
     # Software-based switches for PMS control
   - platform: gpio
-    pin: GPIO26  # PMS Reset (Enviro+ Pin 13)
+    pin: GPIO26                     # PMS Reset (Enviro+ Pin 13)
     name: "PMS Reset"
     id: pms_reset_switch
-    inverted: true  # Active-low (pull low to reset)
-    icon: "mdi:restart"  # Optional HA icon
+    inverted: true                 # Active-low (pull low to reset)
+    icon: "mdi:restart"               # Optional HA icon
     on_turn_on:
       then:
-        - delay: 100ms  # Short pulse for reset
-        - switch.turn_off: pms_reset_switch  # Auto-off to end pulse
+        - delay: 100ms                 # Short pulse for reset
+        - switch.turn_off: pms_reset_switch   # Auto-off to end pulse
 
   - platform: gpio
-    pin: GPIO27  # PMS Enable/Set (Enviro+ Pin 15)
+    pin: GPIO27                     # PMS Enable/Set (Enviro+ Pin 15)
     name: "PMS Enable"
     id: pms_enable_switch
-    inverted: false  # High for active mode, low for passive
-    icon: "mdi:power"  # Optional HA icon
-    restore_mode: ALWAYS_ON  # Default to active mode on boot
+    inverted: false                  # High for active mode, low for passive
+    icon: "mdi:power"                # Optional HA icon
+    restore_mode: ALWAYS_ON            # Default to active mode on boot
 
 light:
   - platform: monochromatic
@@ -763,7 +762,7 @@ light:
           value: '0'
       - globals.set:
           id: cycle_count_current
-          value: '0'               # reset counter
+          value: '0'                            # reset counter
       - script.execute: display_cycle_script   # will restart if already running
 
     on_turn_off:
@@ -852,6 +851,8 @@ display:
 
         case 2: // Pressure
           it.printf(0, 0, id(user_font), Color::BLACK, "Pres: %.1f hPa", id(press_sensor).state);
+          it.printf(0, 27, id(user_font), Color::BLACK, "Light: %.1f Lux", id(light_sensor).state);
+          it.printf(0, 58, id(user_font), Color::BLACK, "Oxi : %.1f kΩ", id(ox_raw).state);
           break;
         case 3:
           it.printf(0, 0, id(user_font), Color::BLACK, "Light: %.1f Lux", id(light_sensor).state);
@@ -867,6 +868,8 @@ display:
           break;
         case 7:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM1 : %.1f µg/m³", id(pm1_sensor).state);
+          it.printf(0, 27, id(user_font), Color::BLACK, "PM25: %.1f µg/m³", id(pm25_sensor).state);
+          it.printf(0, 58, id(user_font), Color::BLACK, "PM10: %.1f µg/m³", id(pm10_sensor).state);
           break;
         case 8:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM25: %.1f µg/m³", id(pm25_sensor).state);
@@ -876,6 +879,8 @@ display:
           break;
         case 10:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM1 AQI: %.0f", id(pm1_aqi).state);
+          it.printf(0, 27, id(user_font), Color::BLACK, "PM25 AQI: %.0f", id(pm25_aqi).state);
+          it.printf(0, 58, id(user_font), Color::BLACK, "PM10 AQI: %.0f", id(pm10_aqi).state);
           break;
         case 11:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM25 AQI: %.0f", id(pm25_aqi).state);
@@ -885,6 +890,8 @@ display:
           break;
         case 13:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM0.3 : %.0f #/.1L", id(pm0_3_sensor).state);
+          it.printf(0, 27, id(user_font), Color::BLACK, "PM0.5 : %.0f #/.1L", id(pm0_5_sensor).state);
+          it.printf(0, 58, id(user_font), Color::BLACK, "PM1.0 : %.0f #/.1L", id(pm1_0_sensor).state);
           break;
         case 14:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM0.5 : %.0f #/.1L", id(pm0_5_sensor).state);
@@ -894,6 +901,8 @@ display:
           break;
         case 16:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM2.5 : %.0f #/.1L", id(pm2_5_sensor).state);
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM5.0 : %.0f #/.1L", id(pm5_0_sensor).state);
+          it.printf(0, 0, id(user_font), Color::BLACK, "PM10 : %.0f #/.1L", id(pm10_0_sensor).state);
           break;
         case 17:
           it.printf(0, 0, id(user_font), Color::BLACK, "PM5.0 : %.0f #/.1L", id(pm5_0_sensor).state);
